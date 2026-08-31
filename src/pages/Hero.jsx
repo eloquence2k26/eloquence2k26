@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import logoImg from '../assets/logo.png';
 import cahcetLogo from '../assets/cahcet.png';
 
-const EVENT_START = new Date('2026-09-26T00:00:00+05:30').getTime();
+const EVENT_START = new Date('2026-09-29T00:00:00+05:30').getTime();
 
 function getTimeRemaining() {
   const remainingSeconds = Math.max(0, Math.floor((EVENT_START - Date.now()) / 1000));
@@ -171,7 +171,7 @@ export default function Hero({ onExplore, onRegister }) {
       <div className="hero-cyber-grid" />
       <div className="hero-ambient-glow" />
       <div className="hero-hud-lines" />
-
+      
       <div className="hero-content">
         {/* Centered College Crest Badge */}
         <div className="hero-college-crest-container">
@@ -225,7 +225,7 @@ export default function Hero({ onExplore, onRegister }) {
         </div>
 
         {/* Event Date */}
-        <p className="hero-date">SEPTEMBER 26, 2026</p>
+        <p className="hero-date">SEPTEMBER 29, 2026</p>
 
         {/* Explore / Register Action Button */}
         <div className="hero-buttons">
