@@ -1,21 +1,5 @@
 [
   {
-    "id": "sponsor-elite-01",
-    "name": "APEX",
-    "companyName": "Apex Dynamics Pvt Ltd",
-    "logo": "/uploads/sponsor-1788323670774-4855.png",
-    "description": "A product engineering firm backing next-gen student innovation across South India.",
-    "website": "https://example.com/apex-dynamics",
-    "contactName": "Rajesh Kumar",
-    "contactEmail": "partnerships@apexdynamics.in",
-    "contactPhone": "9876543210",
-    "category": "Title Sponsor",
-    "displayOrder": 1,
-    "isActive": true,
-    "createdAt": "2026-09-01T00:00:00.000Z",
-    "updatedAt": "2026-09-02T04:34:34.073Z"
-  },
-  {
     "id": "sponsor-elite-02",
     "name": "NOVA SYSTEMS",
     "companyName": "Nova Cloud Systems Inc",

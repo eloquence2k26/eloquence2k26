@@ -1,0 +1,24 @@
+[
+  {
+    "id": "web-team",
+    "role": "WEBSITE DEVELOPMENT TEAM",
+    "tag": "WEB & TECH CREW",
+    "iconName": "Code",
+    "tier": "cyan",
+    "desc": "Architecting the official Eloquence 2026 digital platform, registration engine, and interactive cyber experience.",
+    "names": [
+
+    ]
+  },
+  {
+    "id": "main-coordinators",
+    "role": "MAIN COORDINATOR TEAM",
+    "tag": "STUDENT LEADERSHIP",
+    "iconName": "Users",
+    "tier": "emerald",
+    "desc": "Leading symposium logistics, operations, participant management, and orchestrating Eloquence 2026.",
+    "names": [
+      "Main Student Coordinators"
+    ]
+  }
+]
