@@ -16,5 +16,11 @@
     "username": "bada bai",
     "password": "admin",
     "role": "superadmin"
+  },
+  {
+    "id": 1788332105472,
+    "username": "thanveer",
+    "password": "admin",
+    "role": "coordinator"
   }
 ]
