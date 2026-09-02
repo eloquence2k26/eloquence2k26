@@ -128,12 +128,18 @@ function CoordinatorSlideCard({ item, index }) {
     color3 = '#0d0216';
   }
 
-  // Support both member objects and simple name strings
-  const membersList = item.members && item.members.length > 0
+  // Support both member objects and simple name strings, filtering out empty entries
+  const rawMembers = item.members && item.members.length > 0
     ? item.members
     : item.names && item.names.length > 0
-    ? item.names.map((name) => ({ name, role: '' }))
+    ? item.names.map((name) => (typeof name === 'string' ? { name, role: '' } : name))
     : [];
+
+  const membersList = rawMembers.filter((m) => {
+    if (!m) return false;
+    if (typeof m === 'string') return m.trim().length > 0;
+    return m.name && m.name.trim().length > 0;
+  });
 
   return (
     <div
