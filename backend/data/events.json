@@ -56,7 +56,8 @@
       "2 mins Q&A",
       "< 7 slides limit",
       "₹100/head"
-    ]
+    ],
+    "image": "/uploads/sponsor-1788323670774-4855.png"
   },
   {
     "id": "tech-02",
@@ -231,64 +232,6 @@
       "Systems provided",
       "Round 1: Landing page",
       "Round 2: Overall website"
-    ]
-  },
-  {
-    "id": "tech-05",
-    "number": "05",
-    "name": "POSTER DESIGN (CHART)",
-    "alias": "Chart Canvas",
-    "subtitle": "Manual Chart & Visual Design",
-    "category": "technical",
-    "teamSize": "Team (Max 3 members)",
-    "minMembers": 1,
-    "maxMembers": 3,
-    "fee": "₹50 per head",
-    "feePerHead": 50,
-    "feeType": "per_head",
-    "isTeam": true,
-    "tag": "Creative Graphics",
-    "venue": "Drawing Hall 1",
-    "timing": "11:00 AM – 01:00 PM",
-    "description": "Express technical architectures, environmental concepts, and futuristic tech through handmade chart posters.",
-    "rules": [
-      "Maximum of 3 members per team.",
-      "Topic will be announced on the spot.",
-      "Participants must bring their own drawing materials (Chart sheets provided).",
-      "5 minutes presentation to judges."
-    ],
-    "rounds": [
-      {
-        "name": "Poster Drafting & Design",
-        "time": "60 Mins",
-        "desc": "Craft handmade poster on the announced topic."
-      },
-      {
-        "name": "Jury Evaluation",
-        "time": "5 Mins / Team",
-        "desc": "Explain design concept and technical relevance to judges."
-      }
-    ],
-    "guidelines": [
-      "Standard size chart paper will be supplied by organizers."
-    ],
-    "coordinators": [
-      {
-        "name": "Dr. K. Jayanthi",
-        "role": "Faculty Coordinator",
-        "phone": "9876543218"
-      },
-      {
-        "name": "M. Dinesh",
-        "role": "Student Coordinator",
-        "phone": "9876543219"
-      }
-    ],
-    "highlights": [
-      "Topics on spot",
-      "1 hour designing",
-      "5 mins presentation",
-      "Bring materials"
     ]
   },
   {

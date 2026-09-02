@@ -105,6 +105,7 @@ const dbToEvent = (e) => ({
   venue: e.venue,
   timing: e.timing,
   description: e.description,
+  image: e.image || '',
   rules: e.rules,
   rounds: e.rounds,
   guidelines: e.guidelines,

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS public.events (
     venue TEXT,
     timing TEXT,
     description TEXT,
+    image TEXT,
     rules JSONB,
     rounds JSONB,
     guidelines JSONB,
@@ -36,8 +37,9 @@ CREATE TABLE IF NOT EXISTS public.events (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Ensure event fee column is TEXT type (to store "₹100 per head", etc.)
+-- Ensure event fee column is TEXT type and image column exists
 ALTER TABLE public.events ALTER COLUMN fee TYPE TEXT USING fee::text;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS image TEXT;
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS fee_per_head NUMERIC DEFAULT 0;
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS fee_type TEXT DEFAULT 'per_head';
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS min_members INT DEFAULT 1;
@@ -81,7 +83,6 @@ CREATE TABLE IF NOT EXISTS public.registration_members (
 
 -- ------------------------------------------------------------------------------
 -- 4. COORDINATORS TABLE & CLEAN RECREATION
--- (Drop old table with FK cascade if uuid type conflict exists)
 -- ------------------------------------------------------------------------------
 DROP TABLE IF EXISTS public.event_coordinators CASCADE;
 DROP TABLE IF EXISTS public.coordinators CASCADE;

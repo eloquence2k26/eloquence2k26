@@ -99,6 +99,7 @@ const dbToEvent = (e) => ({
   venue: e.venue,
   timing: e.timing,
   description: e.description,
+  image: e.image || '',
   rules: e.rules,
   rounds: e.rounds,
   guidelines: e.guidelines,
@@ -664,6 +665,7 @@ exports.createEvent = async (req, res) => {
       venue: newEvent.venue,
       timing: newEvent.timing,
       description: newEvent.description,
+      image: newEvent.image,
       rules: newEvent.rules,
       rounds: newEvent.rounds,
       guidelines: newEvent.guidelines,
@@ -731,6 +733,7 @@ exports.updateEvent = async (req, res) => {
   if (teamSize !== undefined) updateFields.team_size = teamSize.trim();
   if (tag !== undefined) updateFields.tag = tag.trim();
   if (description !== undefined) updateFields.description = description.trim();
+  if (image !== undefined) updateFields.image = image.trim();
   if (rules !== undefined && Array.isArray(rules)) updateFields.rules = rules;
   if (rounds !== undefined && Array.isArray(rounds)) updateFields.rounds = rounds;
   if (guidelines !== undefined && Array.isArray(guidelines)) updateFields.guidelines = guidelines;
@@ -754,6 +757,7 @@ exports.updateEvent = async (req, res) => {
     if (subtitle !== undefined) events[eventIndex].subtitle = subtitle.trim();
     if (tag !== undefined) events[eventIndex].tag = tag.trim();
     if (description !== undefined) events[eventIndex].description = description.trim();
+    if (image !== undefined) events[eventIndex].image = image.trim();
     if (rules !== undefined && Array.isArray(rules)) events[eventIndex].rules = rules;
     if (rounds !== undefined && Array.isArray(rounds)) events[eventIndex].rounds = rounds;
     if (guidelines !== undefined && Array.isArray(guidelines)) events[eventIndex].guidelines = guidelines;
