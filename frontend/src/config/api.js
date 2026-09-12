@@ -1,10 +1,22 @@
 // Centralized API Base URL configuration for ELOQUENCE '26
-// In Development: Uses Vite proxy or VITE_API_URL
-// In Production: Uses VITE_API_URL (e.g. https://eloquence2k26-backend.onrender.com) or relative paths
+// In Development (localhost): Proxies to local backend http://localhost:5000 or uses VITE_API_URL
+// In Production: Uses VITE_API_URL or defaults to live backend on Render (https://eloquence2k26.onrender.com)
 
-const envApiUrl = import.meta.env.VITE_API_URL || '';
+const isLocalhost = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' ||
+  window.location.hostname === '127.0.0.1' ||
+  window.location.port === '5173'
+);
 
-export const API_BASE_URL = envApiUrl.replace(/\/+$/, '');
+const rawEnvUrl = import.meta.env.VITE_API_URL || '';
+
+// If on localhost without explicit VITE_API_URL -> use '' (Vite proxy to localhost:5000)
+// If in production (Vercel / live domain) without explicit VITE_API_URL -> default to Render backend
+const resolvedApiUrl = rawEnvUrl 
+  ? rawEnvUrl 
+  : (isLocalhost ? '' : 'https://eloquence2k26.onrender.com');
+
+export const API_BASE_URL = resolvedApiUrl.replace(/\/+$/, '');
 
 export function getApiUrl(endpoint) {
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;

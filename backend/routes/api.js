@@ -38,6 +38,12 @@ router.post('/admin/users', adminController.verifyToken, adminController.require
 router.put('/admin/users/:id', adminController.verifyToken, adminController.requireWriteAccess, adminController.updateUser);
 router.delete('/admin/users/:id', adminController.verifyToken, adminController.requireWriteAccess, adminController.deleteUser);
 
+// ── Admin Role Management ────────────────────────────────────────────────────
+router.get('/admin/roles', adminController.verifyToken, adminController.getRoles);
+router.post('/admin/roles', adminController.verifyToken, adminController.requireWriteAccess, adminController.createRole);
+router.put('/admin/roles/:id', adminController.verifyToken, adminController.requireWriteAccess, adminController.updateRole);
+router.delete('/admin/roles/:id', adminController.verifyToken, adminController.requireWriteAccess, adminController.deleteRole);
+
 // ── Admin Event Allocation Management ────────────────────────────────────────
 router.get('/admin/event-allocations', adminController.verifyToken, adminController.getEventAllocations);
 router.post('/admin/event-allocations', adminController.verifyToken, adminController.requireWriteAccess, adminController.updateEventAllocation);
