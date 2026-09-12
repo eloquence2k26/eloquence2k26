@@ -474,13 +474,104 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
   const S = useMemo(() => getCoordinatorStyles(isDark), [isDark]);
 
   return (
-    <div style={S.container}>
+    <div style={S.container} className="coord-container">
+      {/* ── Mobile Responsive Styles ── */}
+      <style>{`
+        .coord-mobile-btn {
+          display: none;
+        }
+        @media (max-width: 900px) {
+          .coord-header {
+            padding: 0.75rem 1rem !important;
+            gap: 0.5rem !important;
+          }
+          .coord-brand-sub {
+            display: none !important;
+          }
+          .coord-brand-title {
+            font-size: 0.85rem !important;
+          }
+          .coord-mobile-btn {
+            display: flex !important;
+          }
+          .coord-sidebar {
+            position: fixed !important;
+            left: -320px !important;
+            top: 0 !important;
+            bottom: 0 !important;
+            width: 280px !important;
+            height: 100vh !important;
+            z-index: 1000 !important;
+            transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            box-shadow: 10px 0 30px rgba(0, 0, 0, 0.8) !important;
+          }
+          .coord-sidebar.coord-sidebar-open {
+            left: 0 !important;
+          }
+          .coord-logout-text {
+            display: none !important;
+          }
+          .coord-event-selector-wrap {
+            max-width: 180px !important;
+          }
+          .coord-event-select {
+            max-width: 180px !important;
+            font-size: 0.78rem !important;
+            padding: 0.35rem 0.5rem !important;
+          }
+          .coord-main-content {
+            padding: 1rem !important;
+          }
+          .coord-hero-banner {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+            padding: 1.25rem !important;
+            gap: 1rem !important;
+          }
+          .coord-hero-actions {
+            width: 100% !important;
+            flex-direction: row !important;
+          }
+          .coord-hero-actions button {
+            flex: 1 !important;
+          }
+          .coord-metric-grid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: 0.75rem !important;
+          }
+          .coord-participant-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .coord-form-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .coord-two-col-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        @media (max-width: 540px) {
+          .coord-metric-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .coord-header-right {
+            gap: 0.35rem !important;
+          }
+          .coord-user-badge {
+            display: none !important;
+          }
+          .coord-hero-actions {
+            flex-direction: column !important;
+          }
+        }
+      `}</style>
+
       {/* ── Top Header Navigation Bar ── */}
-      <header style={S.header}>
+      <header style={S.header} className="coord-header">
         <div style={S.headerLeft}>
           <button 
             type="button" 
             style={S.mobileMenuBtn} 
+            className="coord-mobile-btn"
             onClick={() => setMobileSidebarOpen(!mobileSidebarOpen)}
             aria-label="Toggle navigation menu"
           >
@@ -492,22 +583,23 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
               <FaShieldAlt style={{ color: '#39FF88', fontSize: '1.1rem' }} />
             </div>
             <div>
-              <div style={S.brandTitle}>EVENT COORDINATOR PORTAL</div>
-              <div style={S.brandSub}>ELOQUENCE 2026 • CAHCET</div>
+              <div style={S.brandTitle} className="coord-brand-title">EVENT COORDINATOR</div>
+              <div style={S.brandSub} className="coord-brand-sub">ELOQUENCE 2026 • CAHCET</div>
             </div>
           </div>
         </div>
 
         {/* Header Right: Event Selector Pills & Actions */}
-        <div style={S.headerRight}>
+        <div style={S.headerRight} className="coord-header-right">
           {/* Assigned Event Selector */}
-          <div style={S.eventSelectorWrap}>
+          <div style={S.eventSelectorWrap} className="coord-event-selector-wrap">
             <span style={S.eventSelectorLabel}>ALLOCATED EVENT:</span>
             {allocatedEventsList.length > 1 ? (
               <select
                 value={selectedEventId}
                 onChange={(e) => setSelectedEventId(e.target.value)}
                 style={S.eventSelectDropdown}
+                className="coord-event-select"
               >
                 {allocatedEventsList.map(evt => (
                   <option key={evt.id} value={evt.id}>
@@ -546,7 +638,7 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
           </button>
 
           {/* User Badge */}
-          <div style={S.userBadge}>
+          <div style={S.userBadge} className="coord-user-badge">
             <FaUserTie size={12} style={{ color: '#39FF88' }} />
             <span>{user?.username || 'Coordinator'}</span>
           </div>
@@ -559,14 +651,42 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
         </div>
       </header>
 
+      {/* ── Mobile Sidebar Backdrop Overlay ── */}
+      {mobileSidebarOpen && (
+        <div 
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 999,
+            display: 'block'
+          }}
+          onClick={() => setMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* ── Main Layout Body ── */}
       <div style={S.layoutBody}>
         {/* ── Dedicated Sidebar for Event Coordinator ── */}
-        <aside style={{ ...S.sidebar, ...(mobileSidebarOpen ? S.sidebarMobileOpen : {}) }}>
+        <aside 
+          style={{ ...S.sidebar, ...(mobileSidebarOpen ? S.sidebarMobileOpen : {}) }} 
+          className={`coord-sidebar ${mobileSidebarOpen ? 'coord-sidebar-open' : ''}`}
+        >
           <div style={S.sidebarHeader}>
-            <div style={S.sidebarEventBadge}>
-              <span style={S.sidebarEventDot} />
-              <span style={S.sidebarEventName}>{currentEvent.name}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={S.sidebarEventBadge}>
+                <span style={S.sidebarEventDot} />
+                <span style={S.sidebarEventName}>{currentEvent.name}</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setMobileSidebarOpen(false)}
+                className="coord-mobile-btn"
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px', display: 'none' }}
+              >
+                <FaTimes size={16} />
+              </button>
             </div>
           </div>
 

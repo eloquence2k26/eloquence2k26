@@ -1256,6 +1256,27 @@ exports.updateDispatch = async (req, res) => {
   }
 };
 
+exports.deleteDispatch = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    try {
+      await supabase.from('dispatches').delete().eq('id', id);
+    } catch (dbErr) {
+      console.warn('Supabase deleteDispatch fallback:', dbErr.message);
+    }
+
+    let dispatches = readDispatches();
+    dispatches = dispatches.filter(d => d.id !== id);
+    writeDispatches(dispatches);
+
+    res.json({ success: true, message: 'Dispatched list deleted and revoked successfully' });
+  } catch (err) {
+    console.error('Error deleting dispatch:', err);
+    res.status(500).json({ success: false, message: 'Failed to delete dispatch' });
+  }
+};
+
 // ── Event Winners & Certificate Handlers ──────────────────────────────
 const WINNERS_FILE = path.join(DATA_DIR, 'event_winners.json');
 if (!fs.existsSync(WINNERS_FILE)) {
