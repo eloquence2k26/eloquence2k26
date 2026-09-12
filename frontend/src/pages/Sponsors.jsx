@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { FaGlobe, FaMapMarkerAlt, FaPhoneAlt, FaUser } from 'react-icons/fa';
 import { getApiUrl } from '../config/api';
 import { getCachedSponsors, fetchSponsorsData, groupSponsorsByTier } from '../services/api.js';
+import ScrollableMarquee from '../components/ScrollableMarquee.jsx';
 
 function SponsorCard({ sponsor, tier }) {
   const [flipped, setFlipped] = useState(false);
@@ -283,13 +284,11 @@ function SponsorCard({ sponsor, tier }) {
 function SponsorRow({ tier, label, items, direction }) {
   if (!items || items.length === 0) return null;
 
-  // Build a base list that contains at least 8 items so the track easily spans across any screen
-  const targetMin = 8;
+  // Build 3 sets of items for seamless infinite bidirectional scrolling and wrapping
+  const targetMin = 6;
   const repeatCount = Math.max(1, Math.ceil(targetMin / items.length));
   const baseItems = Array.from({ length: repeatCount }, () => items).flat();
-
-  // Clone baseItems once for the seamless 50% translateX marquee loop
-  const loopItems = [...baseItems, ...baseItems];
+  const loopItems = [...baseItems, ...baseItems, ...baseItems];
 
   return (
     <div className="sponsor-tier">
@@ -299,13 +298,15 @@ function SponsorRow({ tier, label, items, direction }) {
       <div className="sponsor-marquee">
         <div className="sponsor-marquee-fade sponsor-marquee-fade-left" />
         <div className="sponsor-marquee-fade sponsor-marquee-fade-right" />
-        <div
-          className={`sponsor-track ${direction === 'right' ? 'sponsor-track-reverse' : ''}`}
-        >
-          {loopItems.map((sponsor, i) => (
-            <SponsorCard key={`${sponsor.id}-${tier}-${i}`} sponsor={sponsor} tier={tier} />
-          ))}
-        </div>
+        <ScrollableMarquee speed={34} direction={direction} baseCount={baseItems.length}>
+          <div
+            className={`sponsor-track ${direction === 'right' ? 'sponsor-track-reverse' : ''}`}
+          >
+            {loopItems.map((sponsor, i) => (
+              <SponsorCard key={`${sponsor.id}-${tier}-${i}`} sponsor={sponsor} tier={tier} />
+            ))}
+          </div>
+        </ScrollableMarquee>
       </div>
     </div>
   );
