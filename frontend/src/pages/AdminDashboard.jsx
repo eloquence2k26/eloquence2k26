@@ -55,7 +55,12 @@ import {
   FaCode,
   FaTerminal,
   FaStar,
-  FaLayerGroup
+  FaLayerGroup,
+  FaCopy,
+  FaLock,
+  FaUnlock,
+  FaExclamationTriangle,
+  FaSpinner
 } from 'react-icons/fa';
 import defaultEvents from '../data/events.js';
 import rulesData from '../data/rules.js';
@@ -67,7 +72,8 @@ import {
   createHomepageCoordinatorTeam,
   updateHomepageCoordinatorTeam,
   toggleHomepageCoordinatorTeam,
-  deleteHomepageCoordinatorTeam
+  deleteHomepageCoordinatorTeam,
+  updateRegistrationStatus
 } from '../services/api.js';
 
 const EXISTING_POSTER_PRESETS = [
@@ -92,6 +98,15 @@ export default function AdminDashboard({ token, user, onLogout }) {
   const isLeadCoordinator = loggedRole.includes('lead') || loggedRole === 'lead coordinator' || loggedRole === 'lead_coordinator';
 
   const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = localStorage.getItem('admin_active_tab');
+      if (saved) {
+        if (!isAdminOrSuper && (saved === 'manage-users' || saved === 'manage-roles' || saved === 'close-rg')) {
+          return isRegCoordinator ? 'registration' : 'dashboard';
+        }
+        return saved;
+      }
+    } catch (e) {}
     if (isRegCoordinator) return 'registration';
     return 'dashboard';
   });
@@ -113,7 +128,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
 
   // Redirect if non-admin user accesses restricted tabs
   useEffect(() => {
-    if (!isAdminOrSuper && (activeTab === 'manage-users' || activeTab === 'manage-roles')) {
+    if (!isAdminOrSuper && (activeTab === 'manage-users' || activeTab === 'manage-roles' || activeTab === 'close-rg')) {
       setActiveTab(isRegCoordinator ? 'registration' : 'dashboard');
     }
   }, [activeTab, isAdminOrSuper, isRegCoordinator]);
@@ -807,6 +822,165 @@ export default function AdminDashboard({ token, user, onLogout }) {
       .catch(err => console.warn('Error fetching registrations list:', err));
   };
 
+
+  // ==================== CLOSE RG (REGISTRATION STATUS) STATE ====================
+  const [registrationSettings, setRegistrationSettings] = useState({
+    isRegistrationClosed: false,
+    closedReason: 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!',
+    closedAt: null,
+    closedBy: null
+  });
+  const [isCloseRgModalOpen, setIsCloseRgModalOpen] = useState(false);
+  const [closeRgPendingAction, setCloseRgPendingAction] = useState('close'); // 'close' | 'open'
+  const [customClosedReason, setCustomClosedReason] = useState('');
+  const [isTogglingCloseRg, setIsTogglingCloseRg] = useState(false);
+  const [isSavingCustomReason, setIsSavingCustomReason] = useState(false);
+
+  const fetchRegistrationSettings = () => {
+    fetch(getApiUrl('/api/registration-status'))
+      .then(res => res.json())
+      .then(result => {
+        if (result.success && result.data) {
+          setRegistrationSettings(result.data);
+          setCustomClosedReason(result.data.closedReason || 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!');
+        }
+      })
+      .catch(err => console.warn('Error fetching registration settings:', err));
+  };
+
+  const handleOpenCloseRgModal = (action) => {
+    setCloseRgPendingAction(action);
+    setCustomClosedReason(registrationSettings.closedReason || 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!');
+    setIsCloseRgModalOpen(true);
+  };
+
+  const handleConfirmCloseRgToggle = async () => {
+    if (!isAdminOrSuper) return;
+    setIsTogglingCloseRg(true);
+    const shouldClose = closeRgPendingAction === 'close';
+    try {
+      const res = await updateRegistrationStatus(token, {
+        isRegistrationClosed: shouldClose,
+        closedReason: customClosedReason.trim() || registrationSettings.closedReason
+      });
+      if (res.success && res.data) {
+        setRegistrationSettings(res.data);
+        setIsCloseRgModalOpen(false);
+        toast.success(shouldClose ? 'Registrations have been closed across all symposium events.' : 'Registrations have been re-opened successfully.');
+      } else {
+        toast.error(res.message || 'Failed to update registration status.');
+      }
+    } catch (err) {
+      toast.error('Network error updating registration status.');
+    } finally {
+      setIsTogglingCloseRg(false);
+    }
+  };
+
+  const handleSaveCustomReason = async () => {
+    if (!isAdminOrSuper) return;
+    setIsSavingCustomReason(true);
+    try {
+      const res = await updateRegistrationStatus(token, {
+        isRegistrationClosed: registrationSettings.isRegistrationClosed,
+        closedReason: customClosedReason.trim()
+      });
+      if (res.success && res.data) {
+        setRegistrationSettings(res.data);
+        toast.success('Closing announcement message saved successfully.');
+      } else {
+        toast.error(res.message || 'Failed to update announcement message.');
+      }
+    } catch (err) {
+      toast.error('Network error saving announcement message.');
+    } finally {
+      setIsSavingCustomReason(false);
+    }
+  };
+
+  // ==================== REAL-TIME REGISTRATION WEBSOCKET ====================
+  const [wsConnected, setWsConnected] = useState(false);
+
+  useEffect(() => {
+    let ws = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
+
+    const connectWS = () => {
+      try {
+        const wsUrl = getWsUrl('/ws/registrations');
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          if (!isMounted) return;
+          setWsConnected(true);
+        };
+
+        ws.onmessage = (event) => {
+          if (!isMounted) return;
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'REGISTRATION_UPDATE') {
+              // Automatically refresh registrations and live analytics
+              fetchRegistrations();
+              fetchDashboardData();
+
+              const action = msg.action;
+              const rData = msg.data || {};
+              const ticket = rData.ticketCode || rData.ticket_code || rData.registrationId || rData.id || '';
+              const name = rData.fullName || rData.leadName || rData.full_name || 'Participant';
+              const evt = rData.eventName || 'Event';
+
+              if (action === 'REGISTRATION_STATUS_UPDATED') {
+                setRegistrationSettings(rData);
+                setCustomClosedReason(rData.closedReason || '');
+                if (rData.isRegistrationClosed) {
+                  toast.error('🔒 Alert: Registration portal has been CLOSED across all events.', { duration: 6000 });
+                } else {
+                  toast.success('🔓 Alert: Registration portal has been RE-OPENED for all events.', { duration: 6000 });
+                }
+              } else if (action === 'CREATE') {
+                toast.success(`⚡ Live Registration: ${name} (${evt})!`, { icon: '🔔', duration: 5000 });
+              } else if (action === 'VERIFY') {
+                toast.success(`✅ Live Update: Registration #${ticket} verified!`, { duration: 4000 });
+              } else if (action === 'DELETE') {
+                toast(`🗑️ Live Update: Registration #${ticket} deleted`, { icon: 'ℹ️', duration: 4000 });
+              }
+            }
+          } catch (e) {
+            console.warn('WS message parse error:', e);
+          }
+        };
+
+        ws.onclose = () => {
+          if (!isMounted) return;
+          setWsConnected(false);
+          reconnectTimeout = setTimeout(connectWS, 3000);
+        };
+
+        ws.onerror = () => {
+          if (!isMounted) return;
+          setWsConnected(false);
+        };
+      } catch (err) {
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connectWS, 5000);
+        }
+      }
+    };
+
+    connectWS();
+
+    return () => {
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) {
+        try { ws.close(); } catch (e) {}
+      }
+    };
+  }, []);
+
+
   // ==================== INITIAL DATA FETCH ====================
   useEffect(() => {
     fetchDashboardData();
@@ -817,6 +991,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
     fetchCoordinators();
     fetchHomepageTeams();
     fetchRegistrations();
+    fetchRegistrationSettings();
   }, [token]);
 
   // Handle ESC key to close modal overlays
@@ -2269,6 +2444,37 @@ export default function AdminDashboard({ token, user, onLogout }) {
               <span style={S.badgeCount}>{registrationsList.length}</span>
             </div>
           </button>
+
+          {/* Close RG Tab (Superadmin & Admin only) */}
+          {isAdminOrSuper && (
+            <button 
+              type="button"
+              style={activeTab === 'close-rg' ? { ...S.navItem, ...S.navItemActive } : S.navItem} 
+              onClick={(e) => { e.preventDefault(); setActiveTab('close-rg'); setMobileSidebarOpen(false); }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <FaLock style={{ ...S.navIcon, color: registrationSettings.isRegistrationClosed ? '#ef4444' : '#10b981' }} />
+                  <span style={{ fontWeight: '600' }}>Close RG</span>
+                </div>
+                <span style={{
+                  ...S.badgeCount,
+                  background: registrationSettings.isRegistrationClosed 
+                    ? (isDark ? '#451a1a' : '#fef2f2') 
+                    : (isDark ? '#064e3b' : '#ecfdf5'),
+                  color: registrationSettings.isRegistrationClosed ? '#ef4444' : '#10b981',
+                  border: registrationSettings.isRegistrationClosed 
+                    ? (isDark ? '1px solid #7f1d1d' : '1px solid #fee2e2') 
+                    : (isDark ? '1px solid #05966940' : '1px solid #bbf7d0'),
+                  fontSize: '0.68rem',
+                  fontWeight: '800',
+                  letterSpacing: '0.04em'
+                }}>
+                  {registrationSettings.isRegistrationClosed ? 'CLOSED' : 'OPEN'}
+                </span>
+              </div>
+            </button>
+          )}
         </nav>
 
         <div style={S.sidebarFooter} className="admin-sidebar-footer">
@@ -2295,6 +2501,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
               {activeTab === 'registrations' && 'Participant Registrations & Verification'}
               {activeTab === 'search-participant' && 'Search & Verify Participant (QR Check-in)'}
               {activeTab === 'participant-list' && 'Event-Wise Participant & Team List'}
+              {activeTab === 'close-rg' && 'Close RG — Registration Access Control'}
             </h1>
             <p style={S.pageSubtitle}>
               {activeTab === 'dashboard' && 'Live event analytics, registrations, and entity metrics.'}
@@ -2307,6 +2514,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
               {activeTab === 'registrations' && (isLeadCoordinator ? 'View all registered participants, verify ticket codes, and audit payment status.' : 'View and manage live online portal and offline on-site desk participant registrations with payment and ticket audit.')}
               {activeTab === 'search-participant' && 'Search by ticket code, name, phone, email, college or scan participant ticket QR code for live on-site verification & admission.'}
               {activeTab === 'participant-list' && (isLeadCoordinator ? 'Filter participants by event, view team names, inspect members, and export PDF sheets.' : 'Filter participants by event, view team names, export PDF sheets, and dispatch lists to Event Coordinators.')}
+              {activeTab === 'close-rg' && 'Symposium-wide registration toggle. Instantly lock or open registrations across all events.'}
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -4720,6 +4928,218 @@ export default function AdminDashboard({ token, user, onLogout }) {
               </div>
             </div>
           )}
+
+          {/* ======================================================== */}
+          {/* 11. CLOSE RG (REGISTRATION ACCESS CONTROL)               */}
+          {/* ======================================================== */}
+          {activeTab === 'close-rg' && isAdminOrSuper && (
+            <div style={S.dashboardView}>
+              {/* Hero Status Card */}
+              <div style={{
+                ...S.card,
+                background: registrationSettings.isRegistrationClosed
+                  ? (isDark ? 'linear-gradient(135deg, rgba(127, 29, 29, 0.25) 0%, rgba(69, 26, 26, 0.4) 100%)' : 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)')
+                  : (isDark ? 'linear-gradient(135deg, rgba(6, 78, 59, 0.25) 0%, rgba(6, 95, 70, 0.4) 100%)' : 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)'),
+                border: registrationSettings.isRegistrationClosed
+                  ? (isDark ? '2px solid #ef4444' : '2px solid #f87171')
+                  : (isDark ? '2px solid #10b981' : '2px solid #34d399'),
+                boxShadow: registrationSettings.isRegistrationClosed
+                  ? (isDark ? '0 10px 30px rgba(239, 68, 68, 0.15)' : '0 10px 25px rgba(239, 68, 68, 0.1)')
+                  : (isDark ? '0 10px 30px rgba(16, 185, 129, 0.15)' : '0 10px 25px rgba(16, 185, 129, 0.1)'),
+                marginBottom: '1.75rem',
+                padding: '2rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem' }}>
+                  <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'flex-start' }}>
+                    <div style={{
+                      width: '56px',
+                      height: '56px',
+                      borderRadius: '16px',
+                      background: registrationSettings.isRegistrationClosed ? '#ef4444' : '#10b981',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: registrationSettings.isRegistrationClosed ? '0 4px 14px rgba(239, 68, 68, 0.4)' : '0 4px 14px rgba(16, 185, 129, 0.4)',
+                      flexShrink: 0
+                    }}>
+                      {registrationSettings.isRegistrationClosed ? <FaLock size={26} /> : <FaUnlock size={26} />}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '0.4rem' }}>
+                        <span style={{
+                          background: registrationSettings.isRegistrationClosed ? '#7f1d1d' : '#064e3b',
+                          color: registrationSettings.isRegistrationClosed ? '#fca5a5' : '#6ee7b7',
+                          padding: '0.3rem 0.8rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.75rem',
+                          fontWeight: '800',
+                          letterSpacing: '0.08em',
+                          textTransform: 'uppercase'
+                        }}>
+                          {registrationSettings.isRegistrationClosed ? '● REGISTRATIONS OFFICIALLY CLOSED' : '● REGISTRATIONS LIVE & ACCEPTING'}
+                        </span>
+                        <span style={{ fontSize: '0.8rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                          Mode: All 12 Events
+                        </span>
+                      </div>
+                      <h2 style={{
+                        margin: '0 0 0.5rem 0',
+                        fontSize: '1.65rem',
+                        fontWeight: '800',
+                        color: isDark ? '#f9fafb' : '#0f172a',
+                        letterSpacing: '-0.02em'
+                      }}>
+                        {registrationSettings.isRegistrationClosed 
+                          ? 'Public Registration Portal is Locked' 
+                          : 'Public Registration Portal is Active'}
+                      </h2>
+                      <p style={{
+                        margin: 0,
+                        fontSize: '0.92rem',
+                        color: isDark ? '#cbd5e1' : '#334155',
+                        lineHeight: 1.5,
+                        maxWidth: '680px'
+                      }}>
+                        {registrationSettings.isRegistrationClosed
+                          ? 'All new registrations, form submissions, and online payments are blocked. Visitors visiting the registration portal are shown the official closing notice.'
+                          : 'All 12 technical and non-technical competition forms are open. Participants can submit registrations and complete payments normally.'}
+                      </p>
+                      {registrationSettings.isRegistrationClosed && registrationSettings.closedAt && (
+                        <div style={{ marginTop: '0.85rem', fontSize: '0.8rem', color: isDark ? '#9ca3af' : '#64748b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <FaClock size={12} />
+                          <span>
+                            Closed on {new Date(registrationSettings.closedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
+                            {registrationSettings.closedBy ? ` by ${registrationSettings.closedBy}` : ''}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Toggle Button */}
+                  <div>
+                    {registrationSettings.isRegistrationClosed ? (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCloseRgModal('open')}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '0.9rem 1.8rem',
+                          background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '12px',
+                          fontSize: '0.98rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 15px rgba(5, 150, 105, 0.4)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <FaUnlock size={16} />
+                        <span>Re-Open Registrations</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleOpenCloseRgModal('close')}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          padding: '0.9rem 1.8rem',
+                          background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '12px',
+                          fontSize: '0.98rem',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 15px rgba(220, 38, 38, 0.4)',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <FaLock size={16} />
+                        <span>Close All Registrations (Close RG)</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Metrics Summary Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '1.75rem' }}>
+                <div style={S.statCard}>
+                  <div style={S.statLabel}>Total Participants Registered</div>
+                  <div style={S.statValue}>{registrationsList.length}</div>
+                  <div style={{ fontSize: '0.82rem', color: '#10b981', fontWeight: '600' }}>
+                    Across all symposium events
+                  </div>
+                </div>
+                <div style={S.statCard}>
+                  <div style={S.statLabel}>Confirmed / Paid Admissions</div>
+                  <div style={{ ...S.statValue, color: '#059669' }}>
+                    {registrationsList.filter(r => (r.payment_status || r.paymentStatus || '').toLowerCase() === 'paid').length}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                    Verified with valid ticket codes
+                  </div>
+                </div>
+                <div style={S.statCard}>
+                  <div style={S.statLabel}>Competition Events Covered</div>
+                  <div style={S.statValue}>12</div>
+                  <div style={{ fontSize: '0.82rem', color: isDark ? '#93c5fd' : '#2563eb' }}>
+                    6 Technical • 6 Non-Technical
+                  </div>
+                </div>
+              </div>
+
+              {/* Public Announcement Notice Editor */}
+              <div style={S.card}>
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <h3 style={S.cardTitle}>Public Closing Announcement Notice</h3>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                    This message is prominently displayed to participants when they visit the registration page while registrations are closed.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <textarea
+                    rows={4}
+                    value={customClosedReason}
+                    onChange={(e) => setCustomClosedReason(e.target.value)}
+                    placeholder="e.g. Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!"
+                    style={{
+                      ...S.input,
+                      resize: 'vertical',
+                      lineHeight: 1.5,
+                      fontFamily: 'inherit'
+                    }}
+                  />
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={handleSaveCustomReason}
+                      disabled={isSavingCustomReason}
+                      style={{
+                        ...S.primaryBtn,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      {isSavingCustomReason ? <FaSpinner className="fa-spin" /> : <FaCheck />}
+                      <span>Save Notice Message</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
 
@@ -7127,6 +7547,114 @@ export default function AdminDashboard({ token, user, onLogout }) {
                 )}
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* CLOSE RG CONFIRMATION MODAL                              */}
+      {/* ======================================================== */}
+      {isCloseRgModalOpen && (
+        <div style={S.modalBackdrop} onClick={() => setIsCloseRgModalOpen(false)}>
+          <div style={{ ...S.modalCard, maxWidth: '540px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={S.modalHeader}>
+              <div style={S.modalHeaderLeft}>
+                <div style={{
+                  ...S.modalIconBox,
+                  background: closeRgPendingAction === 'close' 
+                    ? (isDark ? '#451a1a' : '#fee2e2') 
+                    : (isDark ? '#064e3b' : '#d1fae5'),
+                  color: closeRgPendingAction === 'close' ? '#dc2626' : '#059669'
+                }}>
+                  {closeRgPendingAction === 'close' ? <FaLock size={20} /> : <FaUnlock size={20} />}
+                </div>
+                <div>
+                  <h3 style={S.modalTitle}>
+                    {closeRgPendingAction === 'close' ? 'Confirm Registration Closure' : 'Confirm Re-opening Registrations'}
+                  </h3>
+                  <p style={S.modalSubtitle}>
+                    {closeRgPendingAction === 'close' 
+                      ? 'Immediate action affecting all public event registrations' 
+                      : 'Restore public access to symposium registration forms'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIsCloseRgModalOpen(false)} style={S.modalCloseBtn}>✕</button>
+            </div>
+
+            <div style={S.modalFormBody}>
+              {closeRgPendingAction === 'close' ? (
+                <>
+                  <div style={{
+                    background: isDark ? '#451a1a40' : '#fff1f2',
+                    border: isDark ? '1px solid #7f1d1d' : '1px solid #fecdd3',
+                    borderRadius: '10px',
+                    padding: '1rem',
+                    color: isDark ? '#fca5a5' : '#9f1239',
+                    fontSize: '0.88rem',
+                    lineHeight: 1.5,
+                    display: 'flex',
+                    gap: '10px',
+                    alignItems: 'flex-start'
+                  }}>
+                    <FaExclamationTriangle style={{ flexShrink: 0, marginTop: '2px' }} size={16} />
+                    <div>
+                      <strong>Warning:</strong> Closing registrations will immediately block the registration form across all 12 events. Participants will see the closed notice instead of the entry form.
+                    </div>
+                  </div>
+
+                  <div style={S.modalInputGroup}>
+                    <label style={S.label}>Closing Announcement Notice</label>
+                    <textarea
+                      rows={3}
+                      value={customClosedReason}
+                      onChange={(e) => setCustomClosedReason(e.target.value)}
+                      style={{ ...S.input, resize: 'vertical', lineHeight: 1.4 }}
+                    />
+                    <span style={S.inputHelper}>This message is shown to visitors when they attempt to register.</span>
+                  </div>
+                </>
+              ) : (
+                <div style={{
+                  background: isDark ? '#064e3b40' : '#f0fdf4',
+                  border: isDark ? '1px solid #059669' : '1px solid #bbf7d0',
+                  borderRadius: '10px',
+                  padding: '1rem',
+                  color: isDark ? '#6ee7b7' : '#166534',
+                  fontSize: '0.88rem',
+                  lineHeight: 1.5
+                }}>
+                  Are you sure you want to <strong>re-open registrations</strong>? Visitors will immediately be able to fill out forms and register for all symposium events.
+                </div>
+              )}
+            </div>
+
+            <div style={S.modalFooter}>
+              <button
+                type="button"
+                onClick={() => setIsCloseRgModalOpen(false)}
+                style={S.cancelBtn}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isTogglingCloseRg}
+                onClick={handleConfirmCloseRgToggle}
+                style={{
+                  ...S.primaryBtn,
+                  background: closeRgPendingAction === 'close'
+                    ? 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)'
+                    : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                {isTogglingCloseRg ? <FaSpinner className="fa-spin" /> : (closeRgPendingAction === 'close' ? <FaLock /> : <FaUnlock />)}
+                <span>{closeRgPendingAction === 'close' ? 'Yes, Close Registrations' : 'Yes, Re-Open Registrations'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

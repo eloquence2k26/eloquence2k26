@@ -18,10 +18,13 @@ export default function FinalCTA({ onRegister }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     let animationId;
+    let isVisible = false;
     const particles = [];
 
     const resize = () => {
+      if (!canvas.parentElement) return;
       canvas.width = canvas.parentElement.offsetWidth;
       canvas.height = canvas.parentElement.offsetHeight;
     };
@@ -29,8 +32,8 @@ export default function FinalCTA({ onRegister }) {
     class Particle {
       constructor() { this.reset(); }
       reset() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
+        this.x = Math.random() * (canvas.width || 300);
+        this.y = Math.random() * (canvas.height || 300);
         this.size = Math.random() * 1.5 + 0.5;
         this.speedY = -(Math.random() * 0.3 + 0.1);
         this.opacity = Math.random() * 0.4 + 0.1;
@@ -50,16 +53,40 @@ export default function FinalCTA({ onRegister }) {
     }
 
     resize();
-    for (let i = 0; i < 40; i++) particles.push(new Particle());
+    const particleCount = window.innerWidth < 768 ? 16 : 30;
+    for (let i = 0; i < particleCount; i++) particles.push(new Particle());
+
     const animate = () => {
+      if (!isVisible) return;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach((p) => { p.update(); p.draw(); });
+      for (let i = 0; i < particles.length; i++) {
+        particles[i].update();
+        particles[i].draw();
+      }
       animationId = requestAnimationFrame(animate);
     };
-    animate();
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        isVisible = entry.isIntersecting;
+        if (isVisible) {
+          cancelAnimationFrame(animationId);
+          animationId = requestAnimationFrame(animate);
+        } else {
+          cancelAnimationFrame(animationId);
+        }
+      },
+      { threshold: 0.05 }
+    );
+
+    if (sectionRef.current) {
+      observer.observe(sectionRef.current);
+    }
+
     window.addEventListener('resize', resize, { passive: true });
     return () => {
       cancelAnimationFrame(animationId);
+      observer.disconnect();
       window.removeEventListener('resize', resize);
     };
   }, []);

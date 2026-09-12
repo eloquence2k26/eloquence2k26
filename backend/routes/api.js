@@ -12,6 +12,7 @@ router.post('/payment/verify-and-register', apiController.verifyPaymentAndRegist
 router.get('/registrations', apiController.getRegistrations);
 router.get('/registrations/:id', apiController.getRegistrationById);
 router.get('/events', apiController.getPublicEvents);
+router.get('/registration-status', apiController.getRegistrationStatus);
 
 // Public Sponsors & Coordinators
 router.get('/sponsors', apiController.getActiveSponsors);
@@ -77,6 +78,10 @@ router.post('/admin/homepage-coordinators', adminController.verifyToken, adminCo
 router.put('/admin/homepage-coordinators/:id', adminController.verifyToken, adminController.requireWriteAccess, adminController.updateHomepageCoordinator);
 router.patch('/admin/homepage-coordinators/:id/toggle', adminController.verifyToken, adminController.requireWriteAccess, adminController.toggleHomepageCoordinatorStatus);
 router.delete('/admin/homepage-coordinators/:id', adminController.verifyToken, adminController.requireWriteAccess, adminController.deleteHomepageCoordinator);
+
+// ── Admin Registration Access Control (Close RG - Superadmin & Admin only) ──
+router.get('/admin/registration-status', adminController.verifyToken, adminController.requireAdminOrSuperadmin, adminController.getAdminRegistrationStatus);
+router.post('/admin/registration-status', adminController.verifyToken, adminController.requireAdminOrSuperadmin, adminController.updateRegistrationStatus);
 
 module.exports = router;
 

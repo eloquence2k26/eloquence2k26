@@ -293,3 +293,46 @@ export async function deleteHomepageCoordinatorTeam(id, token) {
   return res.json();
 }
 
+// ==================== REGISTRATION STATUS (CLOSE RG) APIS ====================
+
+export async function fetchRegistrationStatus() {
+  try {
+    const res = await fetch(getApiUrl('/api/registration-status'));
+    const data = await res.json();
+    if (data.success) {
+      return data;
+    }
+    return {
+      success: true,
+      isRegistrationClosed: false,
+      closedReason: ''
+    };
+  } catch (err) {
+    console.warn('Failed to fetch registration status from server:', err);
+    return {
+      success: true,
+      isRegistrationClosed: false,
+      closedReason: ''
+    };
+  }
+}
+
+export async function fetchAdminRegistrationStatus(token) {
+  const res = await fetch(getApiUrl('/api/admin/registration-status'), {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return res.json();
+}
+
+export async function updateRegistrationStatus(token, payload) {
+  const res = await fetch(getApiUrl('/api/admin/registration-status'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+

@@ -11,6 +11,41 @@ const coordinatorsFilePath = path.join(__dirname, '../data/coordinators.json');
 const homepageCoordinatorsFilePath = path.join(__dirname, '../data/homepage_coordinators.json');
 const frontendStudentCoordinatorsFilePath = path.join(__dirname, '../../frontend/src/data/studentCoordinators.json');
 const registrationsFilePath = path.join(__dirname, '../data/registrations.json');
+const settingsFilePath = path.join(__dirname, '../data/settings.json');
+
+function getSettingsData() {
+  try {
+    if (!fs.existsSync(settingsFilePath)) {
+      const defaultSettings = {
+        isRegistrationClosed: false,
+        closedReason: 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!',
+        closedAt: null,
+        closedBy: null,
+        updatedAt: new Date().toISOString()
+      };
+      fs.writeFileSync(settingsFilePath, JSON.stringify(defaultSettings, null, 2), 'utf-8');
+      return defaultSettings;
+    }
+    const raw = fs.readFileSync(settingsFilePath, 'utf-8');
+    return JSON.parse(raw || '{}');
+  } catch (err) {
+    return {
+      isRegistrationClosed: false,
+      closedReason: 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!',
+      closedAt: null,
+      closedBy: null
+    };
+  }
+}
+
+function saveSettingsData(data) {
+  try {
+    fs.writeFileSync(settingsFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
 
 
 // ==================== DATA MAPPER HELPERS ====================
@@ -387,6 +422,17 @@ exports.requireWriteAccess = (req, res, next) => {
     return res.status(403).json({
       success: false,
       message: 'Access denied: Lead Coordinator accounts have read-only view access. Add, edit, and delete actions are not allowed.'
+    });
+  }
+  next();
+};
+
+exports.requireAdminOrSuperadmin = (req, res, next) => {
+  const role = String(req.user?.role || '').toLowerCase();
+  if (role !== 'admin' && role !== 'superadmin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied: Only Superadmin and Admin accounts can manage registration portal status.'
     });
   }
   next();
@@ -1913,6 +1959,57 @@ exports.deleteHomepageCoordinator = async (req, res) => {
   } catch (err) {
     console.error('Error in deleteHomepageCoordinator:', err);
     res.status(500).json({ success: false, message: 'Failed to delete homepage coordinator team' });
+  }
+};
+
+// ==================== REGISTRATION ACCESS CONTROL (CLOSE RG) ====================
+exports.getAdminRegistrationStatus = async (req, res) => {
+  try {
+    const settings = getSettingsData();
+    res.json({
+      success: true,
+      data: settings
+    });
+  } catch (err) {
+    console.error('Error in getAdminRegistrationStatus:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch registration status' });
+  }
+};
+
+exports.updateRegistrationStatus = async (req, res) => {
+  try {
+    const { isRegistrationClosed, closedReason } = req.body;
+    const current = getSettingsData();
+    const shouldClose = Boolean(isRegistrationClosed);
+
+    const updated = {
+      ...current,
+      isRegistrationClosed: shouldClose,
+      closedReason: typeof closedReason === 'string' && closedReason.trim() ? closedReason.trim() : current.closedReason,
+      closedAt: shouldClose ? (current.isRegistrationClosed ? current.closedAt : new Date().toISOString()) : null,
+      closedBy: shouldClose ? (req.user?.username || 'admin') : null,
+      updatedAt: new Date().toISOString()
+    };
+
+    saveSettingsData(updated);
+
+    // Broadcast real-time update via WebSocket to all connected clients
+    try {
+      broadcastRegistrationUpdate('REGISTRATION_STATUS_UPDATED', updated);
+    } catch (wsErr) {
+      console.warn('WS Broadcast error:', wsErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: updated.isRegistrationClosed 
+        ? 'Registrations have been closed across all symposium events.' 
+        : 'Registrations have been re-opened successfully.',
+      data: updated
+    });
+  } catch (err) {
+    console.error('Error in updateRegistrationStatus:', err);
+    res.status(500).json({ success: false, message: 'Failed to update registration status' });
   }
 };
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import {
   FaArrowLeft,
   FaArrowRight,
@@ -8,25 +9,85 @@ import {
   FaMoneyBillWave,
   FaUsers,
   FaListOl,
-  FaHeadset
+  FaHeadset,
+  FaSpinner,
+  FaBolt,
+  FaLock
 } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import events from '../data/events.js';
 import rulesData from '../data/rules.js';
-import { getApiUrl } from '../config/api';
 import coordinatorsData from '../data/coordinator.js';
+import { getApiUrl, getWsUrl } from '../config/api';
 
 export default function EventRulesPage({ eventId, from, categoryFilter, onNavigate }) {
   const [eventsList, setEventsList] = useState(events);
-  const event = eventsList.find((e) => e.id === eventId || e.id?.toLowerCase() === eventId?.toLowerCase()) || eventsList[0] || events[0];
+  const [loading, setLoading] = useState(false);
+  const [liveCoordinators, setLiveCoordinators] = useState([]);
+  const [isRegClosed, setIsRegClosed] = useState(false);
 
-  const rulesList = (Array.isArray(event.rules) && event.rules.length > 0)
-    ? event.rules
-    : (rulesData[event.id]?.rules || []);
+  useEffect(() => {
+    let isMounted = true;
+    let ws = null;
+    let reconnectTimer = null;
+    let isExplicitlyClosed = false;
 
-  const [liveCoordinators, setLiveCoordinators] = useState(() => {
-    return event ? (coordinatorsData[event.id]?.coordinators || []) : [];
-  });
+    const checkStatus = () => {
+      fetch(getApiUrl('/api/registration-status'))
+        .then((res) => res.json())
+        .then((data) => {
+          if (isMounted && data.success) {
+            setIsRegClosed(Boolean(data.isRegistrationClosed));
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkStatus();
+
+    window.addEventListener('focus', checkStatus);
+    document.addEventListener('visibilitychange', checkStatus);
+
+    const connectWs = () => {
+      if (isExplicitlyClosed || !isMounted) return;
+      try {
+        ws = new WebSocket(getWsUrl('/ws/registrations'));
+        ws.onmessage = (evt) => {
+          try {
+            const msg = JSON.parse(evt.data);
+            if (msg.type === 'REGISTRATION_UPDATE' && msg.action === 'REGISTRATION_STATUS_UPDATED') {
+              if (isMounted) setIsRegClosed(Boolean(msg.data?.isRegistrationClosed));
+            }
+          } catch (_) {}
+        };
+        ws.onclose = () => {
+          if (!isExplicitlyClosed && isMounted) {
+            reconnectTimer = setTimeout(connectWs, 2000);
+          }
+        };
+        ws.onerror = () => {
+          try { ws.close(); } catch (_) {}
+        };
+      } catch (_) {
+        if (!isExplicitlyClosed && isMounted) {
+          reconnectTimer = setTimeout(connectWs, 2000);
+        }
+      }
+    };
+
+    connectWs();
+
+    return () => {
+      isMounted = false;
+      isExplicitlyClosed = true;
+      window.removeEventListener('focus', checkStatus);
+      document.removeEventListener('visibilitychange', checkStatus);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) {
+        try { ws.close(); } catch (_) {}
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,9 +98,13 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
           setEventsList(result.data);
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn('Using local fallback for events:', err);
+      });
     return () => { isMounted = false; };
   }, [eventId]);
+
+  const event = eventsList.find((e) => e.id === eventId || e.id?.toLowerCase() === eventId?.toLowerCase()) || (eventsList.length > 0 ? eventsList[0] : events[0]);
 
   useEffect(() => {
     if (!event?.id) return;
@@ -61,31 +126,38 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
     return () => { isMounted = false; };
   }, [event?.id]);
 
+  const rulesList = (event && Array.isArray(event.rules) && event.rules.length > 0)
+    ? event.rules
+    : (event ? (rulesData[event.id]?.rules || []) : []);
+
   const coordsList = (Array.isArray(liveCoordinators) && liveCoordinators.length > 0)
     ? liveCoordinators
-    : (Array.isArray(event.coordinators) && event.coordinators.length > 0
+    : (event && Array.isArray(event.coordinators) && event.coordinators.length > 0
         ? event.coordinators
-        : (coordinatorsData[event.id]?.coordinators || []));
+        : (event ? (coordinatorsData[event.id]?.coordinators || []) : []));
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [eventId]);
 
-  const isEsports = event.id === 'nontech-05';
+  const isEsports = event && (event.id === 'nontech-05' || event.name?.toLowerCase().includes('gaming') || event.name?.toLowerCase().includes('battle of champions'));
 
   const handleRegister = () => {
-    if (onNavigate) {
+    if (isRegClosed) return;
+    if (onNavigate && event) {
       onNavigate('register', event.id);
     }
   };
 
   const handleRegisterGame = (game) => {
-    if (onNavigate) {
+    if (isRegClosed) return;
+    if (onNavigate && event) {
       onNavigate('register', { eventId: event.id, game });
     }
   };
 
   const handleTopRegisterClick = () => {
+    if (isRegClosed) return;
     if (isEsports) {
       const el = document.querySelector('.esports-cta-wrap');
       if (el) {
@@ -102,6 +174,79 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
     }
   };
 
+  if (loading) {
+    return (
+      <div className="event-rules-page" style={{ minHeight: '75vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="events-loading-container"
+          style={{ padding: '3rem 1.5rem', maxWidth: '480px' }}
+        >
+          {/* High-tech cyberpunk orbital radar loader */}
+          <div className="cyber-loader-wrap">
+            <motion.div
+              className="cyber-orbit-ring-outer"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
+            />
+            <motion.div
+              className="cyber-orbit-ring-inner"
+              animate={{ rotate: -360 }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
+            />
+            <motion.div
+              className="cyber-loader-core"
+              animate={{
+                scale: [0.92, 1.08, 0.92],
+                boxShadow: [
+                  '0 0 15px rgba(57, 255, 136, 0.4)',
+                  '0 0 28px rgba(0, 240, 255, 0.75)',
+                  '0 0 15px rgba(57, 255, 136, 0.4)',
+                ],
+              }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <FaBolt className="cyber-loader-icon" />
+            </motion.div>
+          </div>
+
+          <div className="cyber-loading-meta">
+            <h4 className="cyber-loading-title">LOADING EVENT RULES</h4>
+            <p className="cyber-loading-subtext">
+              Please wait while we fetch the rules and details
+              <span className="cyber-loading-dots">
+                <span>.</span><span>.</span><span>.</span>
+              </span>
+            </p>
+            <div className="cyber-loading-beam-wrap">
+              <motion.div
+                className="cyber-loading-beam"
+                animate={{ x: ['-100%', '100%'] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (!event) {
+    return (
+      <div className="event-rules-page" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
+          <h2 style={{ color: '#ef4444', marginBottom: '0.5rem' }}>Event Not Found</h2>
+          <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>This competition does not exist or hasn't been added to the database yet.</p>
+          <button className="btn btn-primary" onClick={handleBackToEvents}>
+            <FaArrowLeft style={{ marginRight: '6px' }} /> Return to Events
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="event-rules-page">
       <div className="event-rules-full-container">
@@ -116,8 +261,29 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
             <FaArrowLeft style={{ marginRight: '0.45rem', verticalAlign: '-1px' }} />
             Back to Events
           </button>
-          <button className="rules-register-top-btn" onClick={handleTopRegisterClick}>
-            Register Now <FaArrowRight style={{ marginLeft: '0.45rem', verticalAlign: '-1px' }} />
+          <button
+            className="rules-register-top-btn"
+            onClick={isRegClosed ? undefined : handleTopRegisterClick}
+            disabled={isRegClosed}
+            style={isRegClosed ? {
+              background: 'rgba(239, 68, 68, 0.15)',
+              borderColor: 'rgba(239, 68, 68, 0.5)',
+              color: '#fca5a5',
+              cursor: 'not-allowed',
+              opacity: 0.9,
+              boxShadow: 'none',
+              transform: 'none'
+            } : {}}
+          >
+            {isRegClosed ? (
+              <>
+                <FaLock style={{ marginRight: '0.45rem', verticalAlign: '-1px' }} /> Registrations Closed
+              </>
+            ) : (
+              <>
+                Register Now <FaArrowRight style={{ marginLeft: '0.45rem', verticalAlign: '-1px' }} />
+              </>
+            )}
           </button>
         </motion.div>
 
@@ -196,33 +362,74 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
             {isEsports ? (
               <div className="overview-card-cta-wrap esports-cta-wrap">
                 <div className="esports-cta-heading">
-                  REGISTRATION FOR THIS EVENT
+                  {isRegClosed ? 'REGISTRATIONS STATUS' : 'REGISTRATION FOR THIS EVENT'}
                 </div>
-                <div className="esports-buttons-grid">
+                {isRegClosed ? (
                   <button
                     type="button"
-                    className="esports-action-btn esports-btn-freefire"
-                    onClick={() => handleRegisterGame('FREE FIRE')}
-                    id="btn-register-freefire"
+                    className="btn btn-primary btn-full-width"
+                    disabled={true}
+                    style={{
+                      background: 'linear-gradient(135deg, #7f1d1d, #451a1a)',
+                      borderColor: '#ef4444',
+                      color: '#fca5a5',
+                      cursor: 'not-allowed',
+                      boxShadow: 'none',
+                      transform: 'none',
+                      opacity: 0.95
+                    }}
                   >
-                    <span>FREE FIRE</span>
-                    <FaArrowRight className="esports-btn-arrow" />
+                    <FaLock style={{ marginRight: '0.4rem' }} /> REGISTRATIONS CLOSED
                   </button>
-                  <button
-                    type="button"
-                    className="esports-action-btn esports-btn-bgmi"
-                    onClick={() => handleRegisterGame('BGMI')}
-                    id="btn-register-bgmi"
-                  >
-                    <span>BGMI</span>
-                    <FaArrowRight className="esports-btn-arrow" />
-                  </button>
-                </div>
+                ) : (
+                  <div className="esports-buttons-grid">
+                    <button
+                      type="button"
+                      className="esports-action-btn esports-btn-freefire"
+                      onClick={() => handleRegisterGame('FREE FIRE')}
+                      id="btn-register-freefire"
+                    >
+                      <span>FREE FIRE</span>
+                      <FaArrowRight className="esports-btn-arrow" />
+                    </button>
+                    <button
+                      type="button"
+                      className="esports-action-btn esports-btn-bgmi"
+                      onClick={() => handleRegisterGame('BGMI')}
+                      id="btn-register-bgmi"
+                    >
+                      <span>BGMI</span>
+                      <FaArrowRight className="esports-btn-arrow" />
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="overview-card-cta-wrap">
-                <button className="btn btn-primary btn-full-width" onClick={handleRegister}>
-                  REGISTER FOR THIS EVENT <FaArrowRight style={{ marginLeft: '0.4rem' }} />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-full-width"
+                  onClick={isRegClosed ? undefined : handleRegister}
+                  disabled={isRegClosed}
+                  style={isRegClosed ? {
+                    background: 'linear-gradient(135deg, #7f1d1d, #451a1a)',
+                    borderColor: '#ef4444',
+                    color: '#fca5a5',
+                    cursor: 'not-allowed',
+                    boxShadow: 'none',
+                    transform: 'none',
+                    opacity: 0.95
+                  } : {}}
+                >
+                  {isRegClosed ? (
+                    <>
+                      <FaLock style={{ marginRight: '0.4rem' }} /> REGISTRATIONS CLOSED
+                    </>
+                  ) : (
+                    <>
+                      REGISTER FOR THIS EVENT <FaArrowRight style={{ marginLeft: '0.4rem' }} />
+                    </>
+                  )}
                 </button>
               </div>
             )}

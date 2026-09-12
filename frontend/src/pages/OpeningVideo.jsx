@@ -32,6 +32,9 @@ export default function OpeningVideo({ onComplete }) {
 
   const handleFinish = () => {
     if (fading || removed) return;
+    try {
+      sessionStorage.setItem('eloquence_intro_played', 'true');
+    } catch (_) {}
     setFading(true);
     setTimeout(() => {
       setRemoved(true);
@@ -43,7 +46,7 @@ export default function OpeningVideo({ onComplete }) {
         } catch (_) {}
       }
       if (onComplete) onComplete();
-    }, 400);
+    }, 350);
   };
 
   const currentVideoSrc = isMobile ? portraitVideoSrc : desktopVideoSrc;
@@ -118,8 +121,9 @@ export default function OpeningVideo({ onComplete }) {
         playsInline
         webkit-playsinline="true"
         x5-playsinline="true"
-        preload="auto"
+        preload="metadata"
         onEnded={handleFinish}
+        onError={handleFinish}
         className="opening-video-element"
       />
       <div className="opening-video-vignette" />

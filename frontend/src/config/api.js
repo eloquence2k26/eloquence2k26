@@ -14,4 +14,20 @@ export function getApiUrl(endpoint) {
   return `${API_BASE_URL}${cleanEndpoint}`;
 }
 
+export function getWsUrl(endpoint = '/ws/registrations') {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (API_BASE_URL) {
+    return API_BASE_URL.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:') + cleanEndpoint;
+  }
+  if (typeof window !== 'undefined') {
+    const isDev = window.location.port === '5173' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isDev) {
+      return `ws://localhost:5000${cleanEndpoint}`;
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}${cleanEndpoint}`;
+  }
+  return `ws://localhost:5000${cleanEndpoint}`;
+}
+
 export default API_BASE_URL;

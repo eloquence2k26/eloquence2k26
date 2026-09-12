@@ -35,7 +35,7 @@ export default function Intro() {
         </div>
         <div className="intro-right">
           <div className="intro-image-wrapper">
-            <img src={cahcetAbout} alt="CAHCET" className="intro-image" />
+            <img src={cahcetAbout} alt="CAHCET" className="intro-image" loading="lazy" decoding="async" />
             <p className="intro-venue">Venue: C Abdul Hakeem College of Engineering and Technology, Melvisharam, Ranipet District</p>
           </div>
         </div>

@@ -26,6 +26,7 @@ const DB_FILE = path.join(DATA_DIR, 'registrations.json');
 const SPONSORS_FILE = path.join(DATA_DIR, 'sponsors.json');
 const COORDINATORS_FILE = path.join(DATA_DIR, 'coordinators.json');
 const HOMEPAGE_COORDINATORS_FILE = path.join(DATA_DIR, 'homepage_coordinators.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 // Ensure data directory and file exist
 if (!fs.existsSync(DATA_DIR)) {
@@ -33,6 +34,47 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 if (!fs.existsSync(DB_FILE)) {
   fs.writeFileSync(DB_FILE, JSON.stringify([], null, 2), 'utf-8');
+}
+if (!fs.existsSync(SETTINGS_FILE)) {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify({
+    isRegistrationClosed: false,
+    closedReason: 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!',
+    closedAt: null,
+    closedBy: null,
+    updatedAt: new Date().toISOString()
+  }, null, 2), 'utf-8');
+}
+
+function readSettings() {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      return {
+        isRegistrationClosed: false,
+        closedReason: 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!',
+        closedAt: null,
+        closedBy: null
+      };
+    }
+    const raw = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+    return JSON.parse(raw || '{}');
+  } catch (err) {
+    return {
+      isRegistrationClosed: false,
+      closedReason: 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!',
+      closedAt: null,
+      closedBy: null
+    };
+  }
+}
+
+function writeSettings(data) {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('Error writing settings file:', err);
+    return false;
+  }
 }
 
 function readRegistrations() {
@@ -204,10 +246,34 @@ exports.getStatus = (req, res) => {
   });
 };
 
+exports.getRegistrationStatus = (req, res) => {
+  try {
+    const settings = readSettings();
+    res.json({
+      success: true,
+      data: settings,
+      isRegistrationClosed: Boolean(settings.isRegistrationClosed),
+      closedReason: settings.closedReason || 'Registrations for ELOQUENCE 2026 are officially closed. Thank you for your overwhelming interest!',
+      closedAt: settings.closedAt || null
+    });
+  } catch (err) {
+    console.error('Error reading registration status:', err);
+    res.status(500).json({ success: false, message: 'Failed to read registration status' });
+  }
+};
+
 // ── Razorpay Payment Gateway Integration ──────────────────────────────────────
 
 exports.createPaymentOrder = async (req, res) => {
   try {
+    const settings = readSettings();
+    if (settings.isRegistrationClosed) {
+      return res.status(403).json({
+        success: false,
+        message: settings.closedReason || 'Registrations for ELOQUENCE 2026 are officially closed. No new registrations are accepted.'
+      });
+    }
+
     const { currentEvent, fields, totalFee, game } = req.body;
 
     if (!currentEvent || !fields) {
@@ -270,6 +336,14 @@ exports.createPaymentOrder = async (req, res) => {
 };
 
 exports.verifyPaymentAndRegister = async (req, res) => {
+  const settings = readSettings();
+  if (settings.isRegistrationClosed) {
+    return res.status(403).json({
+      success: false,
+      message: settings.closedReason || 'Registrations for ELOQUENCE 2026 are officially closed. No new registrations are accepted.'
+    });
+  }
+
   const {
     razorpay_order_id,
     razorpay_payment_id,
@@ -479,6 +553,14 @@ exports.verifyPaymentAndRegister = async (req, res) => {
 };
 
 exports.registerEvent = async (req, res) => {
+  const settings = readSettings();
+  if (settings.isRegistrationClosed) {
+    return res.status(403).json({
+      success: false,
+      message: settings.closedReason || 'Registrations for ELOQUENCE 2026 are officially closed. No new registrations are accepted.'
+    });
+  }
+
   const { currentEvent, fields, totalFee } = req.body;
   
   if (!currentEvent || !fields) {
