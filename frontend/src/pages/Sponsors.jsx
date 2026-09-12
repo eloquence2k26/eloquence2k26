@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FaGlobe, FaMapMarkerAlt, FaPhoneAlt, FaUser } from 'react-icons/fa';
-import sponsors from '../data/sponsors.js';
 import { getApiUrl } from '../config/api';
+import { getCachedSponsors, fetchSponsorsData, groupSponsorsByTier } from '../services/api.js';
 
 function SponsorCard({ sponsor, tier }) {
   const [flipped, setFlipped] = useState(false);
@@ -314,7 +314,10 @@ function SponsorRow({ tier, label, items, direction }) {
 export default function Sponsors() {
   const sectionRef = useRef(null);
   const [visible, setVisible] = useState(false);
-  const [liveTiers, setLiveTiers] = useState(null);
+  
+  const initialCached = getCachedSponsors();
+  const [tiers, setTiers] = useState(() => initialCached ? groupSponsorsByTier(initialCached) : null);
+  const [loading, setLoading] = useState(() => !initialCached);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -327,36 +330,17 @@ export default function Sponsors() {
 
   useEffect(() => {
     let isMounted = true;
-    fetch(getApiUrl('/api/sponsors'))
-      .then((res) => res.json())
-      .then((result) => {
+    fetchSponsorsData()
+      .then((data) => {
         if (!isMounted) return;
-        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
-          const list = result.data;
-          const elite = [];
-          const premium = [];
-          const standard = [];
-
-          list.forEach((s) => {
-            const cat = (s.category || '').toLowerCase();
-            if (cat.includes('elite') || cat.includes('title')) {
-              elite.push(s);
-            } else if (cat.includes('premium') || cat.includes('gold') || cat.includes('silver')) {
-              premium.push(s);
-            } else {
-              standard.push(s);
-            }
-          });
-
-          setLiveTiers({
-            elite,
-            premium,
-            standard,
-          });
+        if (Array.isArray(data)) {
+          setTiers(groupSponsorsByTier(data));
         }
+        setLoading(false);
       })
       .catch((err) => {
-        console.warn('Using static sponsors fallback:', err);
+        console.warn('Failed to load sponsors:', err);
+        if (isMounted) setLoading(false);
       });
 
     return () => {
@@ -364,7 +348,11 @@ export default function Sponsors() {
     };
   }, []);
 
-  const tiers = liveTiers || sponsors;
+  const hasSponsors = tiers && (
+    (tiers.elite && tiers.elite.length > 0) ||
+    (tiers.premium && tiers.premium.length > 0) ||
+    (tiers.standard && tiers.standard.length > 0)
+  );
 
   return (
     <section
@@ -377,15 +365,23 @@ export default function Sponsors() {
         The powerhouses fueling ELOQUENCE26 — hover over any card to know them better.
       </p>
 
-      {tiers.elite && tiers.elite.length > 0 && (
-        <SponsorRow tier="elite" label="ELITE" items={tiers.elite} direction="left" />
-      )}
-      {tiers.premium && tiers.premium.length > 0 && (
-        <SponsorRow tier="premium" label="PREMIUM" items={tiers.premium} direction="right" />
-      )}
-      {tiers.standard && tiers.standard.length > 0 && (
-        <SponsorRow tier="standard" label="STANDARD" items={tiers.standard} direction="left" />
-      )}
+      {loading && !hasSponsors ? (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '160px' }}>
+          <div className="radar-loader-spinner" style={{ width: '38px', height: '38px', border: '3px solid rgba(57, 255, 136, 0.15)', borderTopColor: '#39FF88', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        </div>
+      ) : hasSponsors ? (
+        <>
+          {tiers.elite && tiers.elite.length > 0 && (
+            <SponsorRow tier="elite" label="ELITE" items={tiers.elite} direction="left" />
+          )}
+          {tiers.premium && tiers.premium.length > 0 && (
+            <SponsorRow tier="premium" label="PREMIUM" items={tiers.premium} direction="right" />
+          )}
+          {tiers.standard && tiers.standard.length > 0 && (
+            <SponsorRow tier="standard" label="STANDARD" items={tiers.standard} direction="left" />
+          )}
+        </>
+      ) : null}
     </section>
   );
 }

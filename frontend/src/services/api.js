@@ -88,16 +88,71 @@ export async function submitRegistration(payload) {
 
 // ==================== PUBLIC SPONSOR & COORDINATOR APIS ====================
 
-export async function fetchActiveSponsors() {
+let inMemorySponsorsCache = null;
+
+export function groupSponsorsByTier(list) {
+  if (!Array.isArray(list)) return { elite: [], premium: [], standard: [] };
+  const elite = [];
+  const premium = [];
+  const standard = [];
+
+  list.forEach((s) => {
+    const cat = (s.category || s.tag || '').toLowerCase();
+    if (cat.includes('elite') || cat.includes('title')) {
+      elite.push(s);
+    } else if (cat.includes('premium') || cat.includes('gold') || cat.includes('silver')) {
+      premium.push(s);
+    } else {
+      standard.push(s);
+    }
+  });
+
+  return { elite, premium, standard };
+}
+
+export function getCachedSponsors() {
+  if (inMemorySponsorsCache && Array.isArray(inMemorySponsorsCache)) {
+    return inMemorySponsorsCache;
+  }
+  try {
+    const raw = sessionStorage.getItem('eloquence_db_sponsors');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        inMemorySponsorsCache = parsed;
+        return parsed;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+export function setCachedSponsors(sponsorsList) {
+  if (Array.isArray(sponsorsList)) {
+    inMemorySponsorsCache = sponsorsList;
+    try {
+      sessionStorage.setItem('eloquence_db_sponsors', JSON.stringify(sponsorsList));
+    } catch (_) {}
+  }
+}
+
+export async function fetchSponsorsData() {
   try {
     const res = await fetch(getApiUrl('/api/sponsors'));
-    const data = await res.json();
-    if (data.success) return data.data;
-    return [];
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await res.json();
+    if (result.success && Array.isArray(result.data)) {
+      setCachedSponsors(result.data);
+      return result.data;
+    }
   } catch (err) {
-    console.warn('Failed to fetch sponsors from server, using fallback', err);
-    return [];
+    console.warn('Error fetching sponsors from DB:', err);
   }
+  return getCachedSponsors() || [];
+}
+
+export async function fetchActiveSponsors() {
+  return await fetchSponsorsData();
 }
 
 export async function fetchActiveCoordinators() {

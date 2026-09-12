@@ -5,7 +5,7 @@ import Home from '../pages/Home.jsx';
 import EventsPage from '../pages/EventsPage.jsx';
 import EventRulesPage from '../pages/EventRulesPage.jsx';
 import RegistrationPage from '../pages/RegistrationPage.jsx';
-import { getCachedEvents, fetchEventsData } from '../services/api.js';
+import { getCachedEvents, fetchEventsData, fetchSponsorsData } from '../services/api.js';
 
 const Admin = lazy(() => import('../pages/Admin.jsx'));
 
@@ -80,6 +80,7 @@ export default function AppRouter() {
 
   useEffect(() => {
     fetchEventsData().catch(() => {});
+    fetchSponsorsData().catch(() => {});
   }, []);
 
   useEffect(() => {
