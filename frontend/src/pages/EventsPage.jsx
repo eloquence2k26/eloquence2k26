@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { FaBolt, FaArrowLeft, FaTimes } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import EventCard from './EventCard.jsx';
+import EventRulesModal from '../components/EventRulesModal.jsx';
 import { getCachedEvents, fetchEventsData } from '../services/api.js';
 
 function AnimatedNumber({ value, prefix = '', suffix = '', padDigits = 2, duration = 1800 }) {
@@ -48,6 +49,7 @@ export default function EventsPage({ onNavigate }) {
   const [loading, setLoading] = useState(() => !initialCache || initialCache.length === 0);
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRuleEvent, setSelectedRuleEvent] = useState(null);
   const canvasRef = useRef(null);
 
   // Fetch live event data from backend API
@@ -134,15 +136,30 @@ export default function EventsPage({ onNavigate }) {
     };
   }, []);
 
-  const handleViewRules = (eventId) => {
-    if (onNavigate) {
-      onNavigate('event-rules', eventId, { from: 'events' });
+  // Pop-up rules modal on "View Rules" click
+  const handleViewRules = (eventOrId) => {
+    if (typeof eventOrId === 'object' && eventOrId !== null) {
+      setSelectedRuleEvent(eventOrId);
+    } else {
+      const found = eventsList.find((e) => e.id === eventOrId || e.id?.toLowerCase() === eventOrId?.toLowerCase());
+      if (found) {
+        setSelectedRuleEvent(found);
+      } else if (onNavigate) {
+        onNavigate('event-rules', eventOrId, { from: 'events' });
+      }
     }
   };
 
-  const handleRegister = (eventId) => {
+  // Direct register click
+  const handleRegister = (eventOrId) => {
     if (onNavigate) {
-      onNavigate('event-rules', eventId, { from: 'events' });
+      if (typeof eventOrId === 'object' && eventOrId !== null) {
+        const id = eventOrId.eventId || eventOrId.id;
+        const game = eventOrId.game || null;
+        onNavigate('register', { eventId: id, game }, { from: 'events' });
+      } else {
+        onNavigate('register', eventOrId, { from: 'events' });
+      }
     }
   };
 
@@ -379,6 +396,14 @@ export default function EventsPage({ onNavigate }) {
           </>
         )}
       </section>
+
+      {/* Pop-Up Rules Modal */}
+      <EventRulesModal
+        event={selectedRuleEvent}
+        isOpen={Boolean(selectedRuleEvent)}
+        onClose={() => setSelectedRuleEvent(null)}
+        onRegister={handleRegister}
+      />
     </div>
   );
 }

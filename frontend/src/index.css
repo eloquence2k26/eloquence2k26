@@ -6850,28 +6850,33 @@ img {
   100% { transform: scale(1.25); opacity: 1; }
 }
 
-/* ── 2. Stepper Progress Bar ──────────────────────────────────── */
+/* ── 2. Stepper Progress Bar & Animated Laser Conduit ──────────── */
 .reg-stepper {
   display: flex;
   align-items: center;
-  gap: 0.85rem;
-  background: rgba(10, 18, 12, 0.65);
-  border: 1px solid rgba(57, 255, 136, 0.18);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  padding: 0.8rem 1.4rem;
-  border-radius: 8px;
+  justify-content: flex-start;
+  gap: 1.15rem;
+  background: rgba(10, 18, 12, 0.75);
+  border: 1px solid rgba(57, 255, 136, 0.25);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 0.85rem 1.5rem;
+  border-radius: 12px;
   margin-bottom: 2.25rem;
   overflow-x: auto;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(57, 255, 136, 0.15);
 }
 
 .reg-step-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.6rem;
   opacity: 0.45;
-  transition: opacity 0.25s ease;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
+  user-select: none;
+  position: relative;
 }
 
 .reg-step-item.active {
@@ -6879,52 +6884,169 @@ img {
 }
 
 .reg-step-item.completed {
-  opacity: 0.85;
+  opacity: 0.9;
+}
+
+.reg-step-item.completed:hover {
+  opacity: 1;
+  transform: translateY(-1px);
 }
 
 .reg-step-num {
   font-family: var(--font-display);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 800;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
   color: var(--silver);
   border: 1px solid rgba(255, 255, 255, 0.15);
+  position: relative;
+  transition: all 0.3s ease;
 }
 
 .reg-step-item.active .reg-step-num {
-  background: var(--emerald);
-  color: #ffffff;
-  border-color: var(--bright-green);
-  box-shadow: 0 0 10px rgba(57, 255, 136, 0.4);
+  background: linear-gradient(135deg, #00A83B 0%, #032a10 100%);
+  color: #FFFFFF;
+  border-color: #39FF88;
+  box-shadow: 0 0 16px rgba(57, 255, 136, 0.65), inset 0 0 8px rgba(57, 255, 136, 0.4);
 }
 
 .reg-step-item.completed .reg-step-num {
-  background: rgba(57, 255, 136, 0.2);
-  color: var(--bright-green);
-  border-color: rgba(57, 255, 136, 0.4);
+  background: linear-gradient(135deg, rgba(57, 255, 136, 0.25) 0%, rgba(0, 168, 59, 0.15) 100%);
+  color: #39FF88;
+  border-color: rgba(57, 255, 136, 0.6);
+  box-shadow: 0 0 10px rgba(57, 255, 136, 0.3);
+}
+
+.step-check-icon {
+  font-size: 0.72rem;
+  color: #39FF88;
+  animation: checkPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+@keyframes checkPop {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Pulsing energy ring around active step */
+.reg-step-pulse-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 9px;
+  border: 1.5px solid #39FF88;
+  opacity: 0;
+  animation: stepPulseRing 2s infinite ease-out;
+  pointer-events: none;
+}
+
+@keyframes stepPulseRing {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { opacity: 0.4; }
+  100% { transform: scale(1.35); opacity: 0; }
 }
 
 .reg-step-label {
   font-family: var(--font-display);
-  font-size: 0.75rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--silver);
+  color: #94a3b8;
+  transition: color 0.3s ease;
 }
 
 .reg-step-item.active .reg-step-label {
-  color: #ffffff;
+  color: #FFFFFF;
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
 }
 
-.reg-step-sep {
-  color: rgba(57, 255, 136, 0.25);
-  font-weight: 700;
+.reg-step-item.completed .reg-step-label {
+  color: #e2e8f0;
+}
+
+/* ── Glowing Animated Connector Beam ─────────────────────────── */
+.reg-step-connector {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 0 0 65px;
+  position: relative;
+}
+
+.connector-track {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  position: relative;
+  overflow: hidden;
+}
+
+.connector-fill {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background 0.4s ease;
+}
+
+.reg-step-connector.connector-active .connector-fill {
+  background: linear-gradient(90deg, #39FF88, #00f0ff);
+  box-shadow: 0 0 10px rgba(57, 255, 136, 0.7);
+}
+
+.connector-laser-glow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, #ffffff, #39FF88, transparent);
+  opacity: 0;
+  transform: translateX(-100%);
+}
+
+.reg-step-connector.connector-active .connector-laser-glow {
+  opacity: 1;
+  animation: laserStream 1.6s infinite linear;
+}
+
+@keyframes laserStream {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+.connector-chevron {
+  font-size: 0.62rem;
+  color: rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.reg-step-connector.connector-active .connector-chevron {
+  color: #39FF88;
+  text-shadow: 0 0 8px #39FF88;
+  animation: chevronPulse 1.2s infinite alternate;
+}
+
+@keyframes chevronPulse {
+  0% { transform: translateX(0); opacity: 0.6; }
+  100% { transform: translateX(2px); opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .reg-stepper {
+    gap: 0.65rem;
+    padding: 0.75rem 1rem;
+  }
+  .reg-step-connector {
+    flex: 0 0 35px;
+  }
+  .reg-step-label {
+    font-size: 0.68rem;
+  }
 }
 
 /* ── 3. Step 01: Event Selector ───────────────────────────────── */
@@ -9422,6 +9544,525 @@ img {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ── 20. Event Rules Pop-Up Modal Styles ────────────────────────── */
+.rules-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+
+.rules-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 8, 5, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 1;
+}
+
+.rules-modal-card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 720px;
+  max-height: 88vh;
+  background: linear-gradient(180deg, rgba(8, 16, 11, 0.96) 0%, rgba(4, 10, 6, 0.98) 100%);
+  border: 1px solid rgba(57, 255, 136, 0.35);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.85), 0 0 35px rgba(57, 255, 136, 0.2);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rules-modal-corner-accent {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.rules-modal-corner-accent.corner-top-left {
+  top: 8px;
+  left: 8px;
+  border-top: 2px solid #39FF88;
+  border-left: 2px solid #39FF88;
+}
+
+.rules-modal-corner-accent.corner-bottom-right {
+  bottom: 8px;
+  right: 8px;
+  border-bottom: 2px solid #39FF88;
+  border-right: 2px solid #39FF88;
+}
+
+.rules-modal-glow-top {
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #39FF88, #00f0ff, transparent);
+  box-shadow: 0 0 16px #39FF88;
+  pointer-events: none;
+}
+
+.rules-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 1.75rem 1.15rem;
+  border-bottom: 1px solid rgba(57, 255, 136, 0.15);
+  background: rgba(57, 255, 136, 0.03);
+}
+
+.rules-modal-header-info {
+  flex: 1;
+}
+
+.rules-modal-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.rules-modal-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.rules-modal-cat-badge.badge-tech {
+  background: rgba(0, 168, 59, 0.15);
+  border: 1px solid rgba(57, 255, 136, 0.5);
+  color: #39FF88;
+}
+
+.rules-modal-cat-badge.badge-nontech {
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.45);
+  color: #00f0ff;
+}
+
+.rules-modal-tag-badge {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.rules-modal-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2.8vw, 1.6rem);
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: #FFFFFF;
+  margin: 0.2rem 0 0;
+  text-shadow: 0 0 15px rgba(57, 255, 136, 0.25);
+  line-height: 1.25;
+}
+
+.rules-modal-alias {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin: 0.2rem 0 0;
+}
+
+.rules-modal-close-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.rules-modal-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: #ef4444;
+  color: #ffffff;
+  transform: rotate(90deg);
+}
+
+.rules-modal-body {
+  padding: 1.35rem 1.75rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.rules-modal-desc-box {
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 3px solid #39FF88;
+  padding: 0.75rem 1rem;
+  border-radius: 0 8px 8px 0;
+}
+
+.rules-modal-desc-text {
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.rules-modal-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+}
+
+.rules-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: rgba(10, 24, 15, 0.6);
+  border: 1px solid rgba(57, 255, 136, 0.15);
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+}
+
+.rules-meta-icon {
+  font-size: 1rem;
+  color: #39FF88;
+  flex-shrink: 0;
+}
+
+.rules-meta-label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.rules-meta-value {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.rules-meta-value.fee-highlight {
+  color: #39FF88;
+}
+
+.rules-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #39FF88;
+  margin-bottom: 0.75rem;
+}
+
+.rules-sec-icon {
+  font-size: 0.82rem;
+}
+
+.rules-highlights-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.rules-highlight-pill {
+  font-size: 0.74rem;
+  font-weight: 600;
+  background: rgba(57, 255, 136, 0.08);
+  border: 1px solid rgba(57, 255, 136, 0.25);
+  color: #39FF88;
+  padding: 0.3rem 0.7rem;
+  border-radius: 9999px;
+}
+
+.rules-modal-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.rules-modal-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.rules-modal-item:hover {
+  border-color: rgba(57, 255, 136, 0.3);
+  background: rgba(57, 255, 136, 0.04);
+}
+
+.rule-number-index {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #39FF88;
+  background: rgba(57, 255, 136, 0.12);
+  border: 1px solid rgba(57, 255, 136, 0.3);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.rule-text-content {
+  font-size: 0.84rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.rules-modal-empty {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.rules-rounds-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 580px) {
+  .rules-rounds-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.rules-round-card {
+  background: rgba(12, 26, 17, 0.65);
+  border: 1px solid rgba(57, 255, 136, 0.18);
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+}
+
+.rules-round-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.rules-round-name {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #39FF88;
+}
+
+.rules-round-time {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+}
+
+.rules-round-desc {
+  font-size: 0.76rem;
+  color: #94a3b8;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.rules-coords-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.65rem;
+}
+
+.rules-coord-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.55rem 0.85rem;
+  border-radius: 8px;
+}
+
+.coord-role-badge {
+  display: block;
+  font-size: 0.62rem;
+  color: #39FF88;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.coord-name-text {
+  font-size: 0.78rem;
+  color: #ffffff;
+}
+
+.coord-call-link {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #39FF88;
+  background: rgba(57, 255, 136, 0.1);
+  border: 1px solid rgba(57, 255, 136, 0.3);
+  padding: 0.25rem 0.55rem;
+  border-radius: 9999px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.coord-call-link:hover {
+  background: #39FF88;
+  color: #031408;
+  box-shadow: 0 0 10px rgba(57, 255, 136, 0.5);
+}
+
+.rules-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  padding: 1.15rem 1.75rem;
+  border-top: 1px solid rgba(57, 255, 136, 0.15);
+  background: rgba(57, 255, 136, 0.02);
+}
+
+.rules-btn-secondary {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.82rem;
+}
+
+.rules-btn-primary {
+  padding: 0.65rem 1.5rem;
+  font-size: 0.82rem;
+}
+
+.rules-modal-esports-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.rules-btn-esports {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.rules-btn-esports.esports-freefire {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.4) 100%);
+  border: 1px solid #ef4444;
+  color: #ffffff;
+}
+
+.rules-btn-esports.esports-freefire:hover {
+  background: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+}
+
+.rules-btn-esports.esports-bgmi {
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(2, 132, 199, 0.4) 100%);
+  border: 1px solid #00f0ff;
+  color: #ffffff;
+}
+
+.rules-btn-esports.esports-bgmi:hover {
+  background: #00f0ff;
+  color: #000000;
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.5);
+}
+
+@media (max-width: 640px) {
+  .rules-modal-overlay {
+    padding: 0.75rem;
+    align-items: flex-end;
+  }
+  .rules-modal-card {
+    max-height: 92vh;
+    border-radius: 16px 16px 8px 8px;
+  }
+  .rules-modal-header {
+    padding: 1.15rem 1.25rem 0.85rem;
+  }
+  .rules-modal-body {
+    padding: 1rem 1.25rem;
+    gap: 1rem;
+  }
+  .rules-modal-footer {
+    padding: 0.85rem 1.25rem;
+    flex-wrap: wrap;
+  }
+  .rules-modal-esports-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+  .rules-btn-esports {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 
 
 

@@ -63,7 +63,7 @@ export default function EventCard({ event, onRegister, onViewRules }) {
   const handleViewRules = (e) => {
     if (e) e.stopPropagation();
     if (onViewRules) {
-      onViewRules(event.id || event);
+      onViewRules(event);
     } else if (onRegister) {
       onRegister(event.id || event);
     }
@@ -71,10 +71,10 @@ export default function EventCard({ event, onRegister, onViewRules }) {
 
   const handleRegister = (e) => {
     if (e) e.stopPropagation();
-    if (onViewRules) {
-      onViewRules(event.id || event);
-    } else if (onRegister) {
+    if (onRegister) {
       onRegister(event.id || event);
+    } else if (onViewRules) {
+      onViewRules(event);
     }
   };
 
