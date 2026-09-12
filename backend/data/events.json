@@ -73,16 +73,8 @@
       "Plagiarism or tab switching results in instant disqualification."
     ],
     "rounds": [
-      {
-        "name": "Round 1: Written Logic Test",
-        "time": "30 Mins",
-        "desc": "MCQs covering syntax, complexity, and output prediction."
-      },
-      {
-        "name": "Round 2: Live Bug Hunting & Coding",
-        "time": "45 Mins",
-        "desc": "Fix broken code snippets and solve competitive problems."
-      }
+      "Round 1: Written Logic Test: MCQs covering syntax, complexity, and output prediction.",
+      "Round 2: Live Bug Hunting & Coding: Fix broken code snippets and solve competitive problems."
     ],
     "guidelines": [
       "Desktop PCs will be provided with offline compilers.",
@@ -93,7 +85,10 @@
       "Round 1: Written test",
       "Round 2: Coding & Debugging"
     ],
-    "image": "/events/img-1788936494979-9577.png"
+    "image": "/events/img-1788936494979-9577.png",
+    "time": "10:00 AM - 1:00 PM",
+    "conductorNotes": "",
+    "updatedAt": "2026-09-12T12:12:02.894Z"
   },
   {
     "id": "tech-03",

@@ -542,7 +542,7 @@ export default function RegistrationCoordinatorDashboard({ token, user, onLogout
     // Analytics Stat Cards Grid
     statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.25rem', marginBottom: '2rem' },
     statCard: { background: isDark ? '#111827' : '#ffffff', padding: '1.5rem', borderRadius: '16px', border: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.03)', display: 'flex', flexDirection: 'column', gap: '0.6rem', cursor: 'pointer', transition: 'all 0.2s ease', position: 'relative', overflow: 'hidden' },
-    statCardActive: { borderColor: '#059669', boxShadow: '0 0 0 2px #059669' },
+    statCardActive: { border: '1px solid #059669', boxShadow: '0 0 0 2px #059669' },
     statHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     statLabel: { color: isDark ? '#9ca3af' : '#64748b', fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em' },
     statValue: { color: isDark ? '#f9fafb' : '#0f172a', fontSize: '2rem', fontWeight: '800' },
@@ -567,7 +567,7 @@ export default function RegistrationCoordinatorDashboard({ token, user, onLogout
     searchInput: { width: '100%', padding: '0.75rem 1.25rem', borderRadius: '10px', border: isDark ? '1px solid #374151' : '1px solid #cbd5e1', background: isDark ? '#1f2937' : '#ffffff', fontSize: '0.9rem', outline: 'none', color: isDark ? '#f9fafb' : '#0f172a' },
     filterGroup: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
     filterBtn: { padding: '0.55rem 1rem', borderRadius: '8px', border: isDark ? '1px solid #374151' : '1px solid #cbd5e1', background: isDark ? '#1f2937' : '#ffffff', color: isDark ? '#9ca3af' : '#64748b', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' },
-    filterBtnActive: { background: '#059669', color: '#ffffff', borderColor: '#059669' },
+    filterBtnActive: { background: '#059669', color: '#ffffff', border: '1px solid #059669' },
     modalInputGroup: { display: 'flex', flexDirection: 'column', gap: '0.4rem' },
     label: { fontSize: '0.85rem', fontWeight: '600', color: isDark ? '#cbd5e1' : '#334155' },
     input: { padding: '0.75rem 1rem', border: isDark ? '1px solid #374151' : '1px solid #cbd5e1', borderRadius: '8px', fontSize: '0.92rem', outline: 'none', background: isDark ? '#1f2937' : '#ffffff', color: isDark ? '#f9fafb' : '#0f172a', width: '100%', boxSizing: 'border-box' },

@@ -26,7 +26,17 @@
   {
     "id": 1788929069120,
     "username": "Faazil",
-    "password": "eloquenceadmin",
+    "password": "admin",
     "role": "web-coordinator"
+  },
+  {
+    "id": 1789212394030,
+    "username": "Mohammed Saad ",
+    "password": "coordinator123",
+    "role": "Event Coordinator",
+    "assignedEvents": [
+      "tech-02"
+    ],
+    "eventId": "tech-02"
   }
 ]

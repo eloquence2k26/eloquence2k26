@@ -1165,7 +1165,7 @@ const dbToDispatch = (d) => ({
 
 exports.sendParticipantList = async (req, res) => {
   try {
-    const { eventId, eventName, coordinatorId, coordinatorName } = req.body;
+    const { eventId, eventName, coordinatorId, coordinatorName, coordinatorUsername } = req.body;
     if (!eventId || !coordinatorName) {
       return res.status(400).json({ success: false, message: 'Event ID and Coordinator Name are required' });
     }
@@ -1177,6 +1177,7 @@ exports.sendParticipantList = async (req, res) => {
       event_id: eventId,
       event_name: eventName || eventId,
       coordinator_name: coordinatorName,
+      coordinator_username: coordinatorUsername || null,
       sent_at: now
     };
 
@@ -1199,7 +1200,7 @@ exports.sendParticipantList = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Participant list for "${eventName || eventId}" sent to ${coordinatorName} successfully in database!`,
+      message: `Participant list for "${eventName || eventId}" sent to ${coordinatorName} (${coordinatorUsername || 'Coordinator Login'}) successfully in database!`,
       dispatch: formatted
     });
   } catch (err) {

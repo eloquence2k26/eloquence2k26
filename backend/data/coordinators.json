@@ -9,7 +9,7 @@
     "year": "3rd Year",
     "role": "Lead Coordinator",
     "assignedEvents": [
-      "tech-01"
+      "tech-02"
     ],
     "isActive": true,
     "displayOrder": 1,
@@ -145,7 +145,7 @@
     "year": "3rd Year",
     "role": "Lead Coordinator",
     "assignedEvents": [
-      "tech-06"
+      "tech-02"
     ],
     "isActive": true,
     "displayOrder": 11,
@@ -314,7 +314,7 @@
     "year": "3rd Year",
     "role": "Lead Coordinator",
     "assignedEvents": [
-      "nontech-06"
+      "tech-02"
     ],
     "isActive": true,
     "displayOrder": 21,
@@ -331,7 +331,7 @@
     "year": "3rd Year",
     "role": "Lead Coordinator",
     "assignedEvents": [
-      "nontech-06"
+      "tech-02"
     ],
     "isActive": true,
     "displayOrder": 22,

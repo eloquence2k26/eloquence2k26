@@ -610,14 +610,33 @@ export default function AdminDashboard({ token, user, onLogout }) {
     win.document.close();
   };
 
+  const [selectedCoordUsername, setSelectedCoordUsername] = useState('');
+
   const handleOpenSendModal = (evt) => {
     setSendTargetEvent(evt);
-    const assigned = coordinators.find(c => Array.isArray(c.assignedEvents) && c.assignedEvents.map(e => e.toLowerCase()).includes(evt.id.toLowerCase()));
-    if (assigned) {
-      setSelectedCoordName(assigned.name);
+    // 1. First check if a login account is allocated for this event
+    const allocatedUser = users.find(u => {
+      const uEvents = u.assignedEvents || (u.eventId ? [u.eventId] : []);
+      return Array.isArray(uEvents) && uEvents.some(e => String(e).toLowerCase() === evt.id.toLowerCase());
+    });
+
+    // 2. Also check coordinators list
+    const assignedCoord = coordinators.find(c => Array.isArray(c.assignedEvents) && c.assignedEvents.map(e => e.toLowerCase()).includes(evt.id.toLowerCase()));
+
+    if (allocatedUser) {
+      setSelectedCoordUsername(allocatedUser.username);
+      setSelectedCoordName(assignedCoord?.name || allocatedUser.username);
+    } else if (assignedCoord) {
+      setSelectedCoordUsername(assignedCoord.name);
+      setSelectedCoordName(assignedCoord.name);
+    } else if (users.length > 0) {
+      setSelectedCoordUsername(users[0].username);
+      setSelectedCoordName(users[0].username);
     } else if (coordinators.length > 0) {
+      setSelectedCoordUsername(coordinators[0].name);
       setSelectedCoordName(coordinators[0].name);
     } else {
+      setSelectedCoordUsername('');
       setSelectedCoordName('');
     }
     setIsSendModalOpen(true);
@@ -629,7 +648,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
     }
 
     setIsSendingList(true);
-    const toastId = toast.loading(`Dispatching list for "${sendTargetEvent.name}"...`);
+    const toastId = toast.loading(`Dispatching list for "${sendTargetEvent.name}" to ${selectedCoordUsername || selectedCoordName}...`);
 
     fetch(getApiUrl('/api/send-participant-list'), {
       method: 'POST',
@@ -637,7 +656,8 @@ export default function AdminDashboard({ token, user, onLogout }) {
       body: JSON.stringify({
         eventId: sendTargetEvent.id,
         eventName: sendTargetEvent.name,
-        coordinatorName: selectedCoordName.trim()
+        coordinatorName: selectedCoordName.trim(),
+        coordinatorUsername: selectedCoordUsername.trim() || selectedCoordName.trim()
       })
     })
       .then(res => res.json())
@@ -844,6 +864,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
   const [closeRgPendingAction, setCloseRgPendingAction] = useState('close'); // 'close' | 'open'
   const [customClosedReason, setCustomClosedReason] = useState('');
   const [isTogglingCloseRg, setIsTogglingCloseRg] = useState(false);
+  const [isSavingCustomReason, setIsSavingCustomReason] = useState(false);
   // ==================== EVENT ALLOCATION STATE ====================
   const [allocUsersList, setAllocUsersList] = useState([]);
   const [allocUserSearch, setAllocUserSearch] = useState('');
@@ -2422,9 +2443,8 @@ export default function AdminDashboard({ token, user, onLogout }) {
     createBtn: { display: 'flex', alignItems: 'center', background: '#2563eb', color: '#ffffff', border: 'none', padding: '0.75rem 1.4rem', borderRadius: '10px', fontSize: '0.92rem', fontWeight: '600', cursor: 'pointer', boxShadow: '0 2px 6px rgba(37,99,235,0.25)', transition: 'background 0.2s', whiteSpace: 'nowrap' },
 
     // Filter Buttons
-    filterGroup: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
     filterBtn: { padding: '0.55rem 1rem', borderRadius: '8px', border: isDark ? '1px solid #374151' : '1px solid #cbd5e1', background: isDark ? '#1f2937' : '#ffffff', color: isDark ? '#9ca3af' : '#64748b', fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s' },
-    filterBtnActive: { background: '#2563eb', color: '#ffffff', borderColor: '#2563eb' },
+    filterBtnActive: { background: '#2563eb', color: '#ffffff', border: '1px solid #2563eb' },
 
     // Cards & Tables
     card: { background: isDark ? '#111827' : '#ffffff', borderRadius: '16px', border: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.03)', overflow: 'hidden' },
@@ -2615,7 +2635,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
             </div>
           </button>
 
-          {/* Event Coordinators Tab */}
+          {/* Event Team Tab */}
           <button 
             type="button"
             style={activeTab === 'manage-coordinators' ? { ...S.navItem, ...S.navItemActive } : S.navItem} 
@@ -2624,7 +2644,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
               <div style={{ display: 'flex', alignItems: 'center' }}>
                 <FaUserTie style={S.navIcon} />
-                <span>Event Coordinators</span>
+                <span>Event Team</span>
               </div>
               <span style={S.badgeCount}>{coordinators.length}</span>
             </div>
@@ -6067,29 +6087,57 @@ export default function AdminDashboard({ token, user, onLogout }) {
 
             <div style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
               <div style={S.modalInputGroup}>
-                <label style={S.label}>Select Event Coordinator Account / Name *</label>
-                {coordinators.length > 0 ? (
-                  <select
-                    value={selectedCoordName}
-                    onChange={(e) => setSelectedCoordName(e.target.value)}
-                    style={S.select}
-                  >
-                    {coordinators.map((c, i) => (
-                      <option key={c.id || i} value={c.name}>
-                        {c.name} {c.assignedEvents?.length ? `(${c.assignedEvents.join(', ')})` : ''}
+                <label style={S.label}>Select Event Coordinator Login / Recipient *</label>
+                <select
+                  value={selectedCoordUsername || selectedCoordName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedCoordUsername(val);
+                    // Match person name if exists
+                    const matchedCoord = coordinators.find(c => c.name === val || c.id === val);
+                    const matchedUser = users.find(u => u.username === val);
+                    setSelectedCoordName(matchedCoord?.name || matchedUser?.username || val);
+                  }}
+                  style={S.select}
+                >
+                  <optgroup label="Allocated Coordinator Logins (Direct Dashboard Delivery)">
+                    {users
+                      .filter(u => {
+                        const uEvents = u.assignedEvents || (u.eventId ? [u.eventId] : []);
+                        return Array.isArray(uEvents) && uEvents.some(e => String(e).toLowerCase() === sendTargetEvent.id.toLowerCase());
+                      })
+                      .map(u => (
+                        <option key={`alloc-u-${u.id}`} value={u.username}>
+                          👤 @{u.username} ({u.role || 'Coordinator Login'}) — Allocated to this Event
+                        </option>
+                      ))}
+                    {users.length > 0 && users.filter(u => {
+                      const uEvents = u.assignedEvents || (u.eventId ? [u.eventId] : []);
+                      return !Array.isArray(uEvents) || !uEvents.some(e => String(e).toLowerCase() === sendTargetEvent.id.toLowerCase());
+                    }).map(u => (
+                      <option key={`other-u-${u.id}`} value={u.username}>
+                        👤 @{u.username} ({u.role})
                       </option>
                     ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    placeholder="Enter Event Coordinator Username / Name"
-                    value={selectedCoordName}
-                    onChange={(e) => setSelectedCoordName(e.target.value)}
-                    style={S.input}
-                    required
-                  />
-                )}
+                  </optgroup>
+
+                  <optgroup label="Assigned Event Coordinators Team">
+                    {coordinators
+                      .filter(c => Array.isArray(c.assignedEvents) && c.assignedEvents.map(e => e.toLowerCase()).includes(sendTargetEvent.id.toLowerCase()))
+                      .map(c => (
+                        <option key={`alloc-c-${c.id}`} value={c.name}>
+                          ★ {c.name} ({c.role || 'Lead Coordinator'}) — Assigned to this Event
+                        </option>
+                      ))}
+                    {coordinators
+                      .filter(c => !Array.isArray(c.assignedEvents) || !c.assignedEvents.map(e => e.toLowerCase()).includes(sendTargetEvent.id.toLowerCase()))
+                      .map(c => (
+                        <option key={`other-c-${c.id}`} value={c.name}>
+                          {c.name} {c.assignedEvents?.length ? `(${c.assignedEvents.join(', ')})` : ''}
+                        </option>
+                      ))}
+                  </optgroup>
+                </select>
               </div>
 
               <div style={{ background: isDark ? '#1f2937' : '#f8fafc', padding: '1rem', borderRadius: '10px', border: isDark ? '1px solid #374151' : '1px solid #e2e8f0' }}>

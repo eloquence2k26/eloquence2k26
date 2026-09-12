@@ -149,7 +149,16 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
         setCoordinatorsList(coordJson.data);
       }
 
-      // 4. Fetch Winners
+      // 4. Fetch Dispatches
+      try {
+        const dispRes = await fetch(getApiUrl('/api/dispatches'));
+        const dispJson = await dispRes.json();
+        if (dispJson.success && Array.isArray(dispJson.data)) {
+          setDispatchesList(dispJson.data);
+        }
+      } catch (_) {}
+
+      // 5. Fetch Winners
       const winData = await fetchEventWinners();
       if (Array.isArray(winData)) {
         setWinnersList(winData);
@@ -161,11 +170,30 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
     }
   };
 
+  const [dispatchesList, setDispatchesList] = useState([]);
+
   useEffect(() => {
     fetchData();
   }, []);
 
-  // ── 4. Filtered Participants for ONLY the Allocated Event ──
+  // ── 4. Filtered Coordinators for ONLY this Allocated Event ──
+  const currentEventTeam = useMemo(() => {
+    return coordinatorsList.filter(c => {
+      const assigned = Array.isArray(c.assignedEvents) ? c.assignedEvents : (c.assigned_events || []);
+      return assigned.some(a => String(a).toLowerCase().trim() === selectedEventId.toLowerCase().trim());
+    });
+  }, [coordinatorsList, selectedEventId]);
+
+  // Check if a participant list was dispatched specifically to this event or login
+  const eventDispatch = useMemo(() => {
+    return dispatchesList.find(d => {
+      const isEvt = String(d.eventId || d.event_id || '').toLowerCase().trim() === selectedEventId.toLowerCase().trim();
+      const isUser = !d.coordinator_username || d.coordinator_username === user?.username || d.coordinatorName?.toLowerCase().includes(String(user?.username || '').toLowerCase());
+      return isEvt && isUser;
+    });
+  }, [dispatchesList, selectedEventId, user]);
+
+  // ── 5. Filtered Participants for ONLY the Allocated Event ──
   const eventParticipants = useMemo(() => {
     return registrationsList.filter(r => {
       const eId = (r.eventId || r.event_id || '').toLowerCase().trim();
@@ -716,7 +744,22 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
               </div>
             </button>
 
-            {/* 3. Event Participant List */}
+            {/* 3. Event Team */}
+            <button
+              type="button"
+              style={activeTab === 'event-team' ? { ...S.navItem, ...S.navItemActive } : S.navItem}
+              onClick={() => { setActiveTab('event-team'); setMobileSidebarOpen(false); }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <FaUserTie style={S.navIcon} />
+                  <span>Event Team</span>
+                </div>
+                <span style={S.badgeCount}>{currentEventTeam.length}</span>
+              </div>
+            </button>
+
+            {/* 4. Event Participant List */}
             <button
               type="button"
               style={activeTab === 'event-participants' ? { ...S.navItem, ...S.navItemActive } : S.navItem}
@@ -731,7 +774,7 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
               </div>
             </button>
 
-            {/* 4. Search & Verify (QR) */}
+            {/* 5. Search & Verify (QR) */}
             <button
               type="button"
               style={activeTab === 'search-verify' ? { ...S.navItem, ...S.navItemActive } : S.navItem}
@@ -748,7 +791,7 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
               </div>
             </button>
 
-            {/* 5. Winner Selection & Certificates */}
+            {/* 6. Winner Selection & Certificates */}
             <button
               type="button"
               style={activeTab === 'winners-certificates' ? { ...S.navItem, ...S.navItemActive } : S.navItem}
@@ -1194,7 +1237,7 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
                               ...S.attendanceToggleBtn,
                               background: isPresent ? 'rgba(57, 255, 136, 0.16)' : 'rgba(255, 255, 255, 0.05)',
                               color: isPresent ? '#39FF88' : '#94a3b8',
-                              borderColor: isPresent ? '#39FF88' : 'rgba(255, 255, 255, 0.15)'
+                              border: isPresent ? '1px solid #39FF88' : '1px solid rgba(255, 255, 255, 0.15)'
                             }}
                             title="Click to toggle attendance status"
                           >
@@ -1589,6 +1632,176 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
               </div>
             </div>
           )}
+
+          {/* ======================================================== */}
+          {/* TAB: EVENT TEAM (Assigned Lead Coordinator & Members)     */}
+          {/* ======================================================== */}
+          {activeTab === 'event-team' && (
+            <div style={S.tabView}>
+              <div style={S.viewHeroBanner} className="coord-hero-banner">
+                <div style={S.heroBannerContent}>
+                  <div style={S.heroBadge}>
+                    <FaUserTie /> EVENT COORDINATOR TEAM
+                  </div>
+                  <h1 style={S.heroTitle}>{currentEvent.name} — Coordinator Roster</h1>
+                  <p style={S.heroDesc}>
+                    Official faculty and student coordinators assigned to lead and execute {currentEvent.name}. Direct calling and WhatsApp support enabled for instant team synchronization.
+                  </p>
+                  <div style={S.heroMetaRow}>
+                    <span style={S.metaChip}>
+                      <FaShieldAlt style={{ color: '#39FF88' }} /> {currentEventTeam.filter(c => (c.role || '').toLowerCase().includes('lead')).length || 1} Lead Coordinator(s)
+                    </span>
+                    <span style={S.metaChip}>
+                      <FaUsers style={{ color: '#39FF88' }} /> {currentEventTeam.length} Team Members Total
+                    </span>
+                    <span style={{ ...S.metaChip, background: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8' }}>
+                      🔒 Strictly Scoped to {currentEvent.name}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Coordinator Cards Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.25rem', marginTop: '1.5rem' }}>
+                {currentEventTeam.map((coord, idx) => {
+                  const isLead = (coord.role || '').toLowerCase().includes('lead');
+                  return (
+                    <div 
+                      key={coord.id || idx} 
+                      style={{
+                        background: isDark ? 'rgba(8, 18, 10, 0.85)' : '#ffffff',
+                        border: isLead ? '1.5px solid rgba(57, 255, 136, 0.45)' : `1px solid ${isDark ? 'rgba(57, 255, 136, 0.18)' : '#e2e8f0'}`,
+                        borderRadius: '16px',
+                        padding: '1.5rem',
+                        boxShadow: isLead ? '0 0 20px rgba(57, 255, 136, 0.1)' : '0 4px 12px rgba(0,0,0,0.03)',
+                        position: 'relative',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+                          <div style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '12px',
+                            background: isLead ? 'rgba(57, 255, 136, 0.15)' : 'rgba(56, 189, 248, 0.12)',
+                            border: isLead ? '1px solid rgba(57, 255, 136, 0.4)' : '1px solid rgba(56, 189, 248, 0.3)',
+                            color: isLead ? '#39FF88' : '#38bdf8',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: '800',
+                            fontSize: '1.1rem'
+                          }}>
+                            {coord.name.slice(0, 2).toUpperCase()}
+                          </div>
+
+                          <span style={{
+                            padding: '0.3rem 0.75rem',
+                            borderRadius: '20px',
+                            background: isLead ? 'rgba(57, 255, 136, 0.15)' : (isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9'),
+                            color: isLead ? '#39FF88' : (isDark ? '#cbd5e1' : '#475569'),
+                            border: isLead ? '1px solid rgba(57, 255, 136, 0.35)' : '1px solid transparent',
+                            fontSize: '0.72rem',
+                            fontWeight: '800',
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase'
+                          }}>
+                            {coord.role || (isLead ? 'Lead Coordinator' : 'Event Coordinator')}
+                          </span>
+                        </div>
+
+                        <h3 style={{ margin: '0 0 0.35rem 0', fontSize: '1.15rem', fontWeight: '800', color: isDark ? '#ffffff' : '#0f172a' }}>
+                          {coord.name}
+                        </h3>
+                        
+                        <div style={{ fontSize: '0.82rem', color: isDark ? '#94a3b8' : '#64748b', marginBottom: '1rem' }}>
+                          {coord.department || 'CSE'} Department • {coord.year || '3rd Year'}
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem' }}>
+                          {coord.email && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isDark ? '#cbd5e1' : '#334155' }}>
+                              <FaEnvelope size={12} style={{ color: '#39FF88', flexShrink: 0 }} />
+                              <span style={{ wordBreak: 'break-all' }}>{coord.email}</span>
+                            </div>
+                          )}
+                          {coord.phone && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isDark ? '#cbd5e1' : '#334155' }}>
+                              <FaPhoneAlt size={11} style={{ color: '#39FF88', flexShrink: 0 }} />
+                              <span>{coord.phone}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Direct Contact Buttons */}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '1.25rem', paddingTop: '1rem', borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9'}` }}>
+                        {coord.phone && (
+                          <a
+                            href={`tel:${coord.phone}`}
+                            style={{
+                              flex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              padding: '0.6rem 0.85rem',
+                              borderRadius: '8px',
+                              background: isDark ? 'rgba(57, 255, 136, 0.12)' : '#ecfdf5',
+                              color: isDark ? '#39FF88' : '#047857',
+                              border: '1px solid rgba(57, 255, 136, 0.3)',
+                              fontWeight: '700',
+                              fontSize: '0.82rem',
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <FaPhoneAlt size={11} /> Call Direct
+                          </a>
+                        )}
+                        {coord.whatsapp && (
+                          <a
+                            href={`https://wa.me/${coord.whatsapp.replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{
+                              flex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px',
+                              padding: '0.6rem 0.85rem',
+                              borderRadius: '8px',
+                              background: isDark ? 'rgba(16, 185, 129, 0.12)' : '#f0fdf4',
+                              color: '#10b981',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              fontWeight: '700',
+                              fontSize: '0.82rem',
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <FaWhatsapp size={13} /> WhatsApp
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {currentEventTeam.length === 0 && (
+                  <div style={{ gridColumn: '1 / -1', padding: '3rem 1.5rem', textAlign: 'center', background: isDark ? 'rgba(8, 18, 10, 0.6)' : '#ffffff', borderRadius: '16px', border: `1px solid ${isDark ? 'rgba(57, 255, 136, 0.15)' : '#e2e8f0'}` }}>
+                    <FaUserTie size={36} style={{ color: '#39FF88', opacity: 0.5, marginBottom: '0.75rem' }} />
+                    <h3 style={{ margin: '0 0 0.5rem 0', color: isDark ? '#ffffff' : '#0f172a' }}>No Coordinators Configured Yet</h3>
+                    <p style={{ margin: 0, fontSize: '0.88rem', color: isDark ? '#94a3b8' : '#64748b' }}>
+                      Symposium administrators have not assigned coordinator profiles to {currentEvent.name} yet.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </main>
       </div>
 
@@ -1897,7 +2110,7 @@ function getCoordinatorStyles(isDark) {
     navItemActive: {
       background: isDark ? 'rgba(57, 255, 136, 0.12)' : 'rgba(57, 255, 136, 0.18)',
       color: isDark ? '#ffffff' : '#047857',
-      borderColor: 'rgba(57, 255, 136, 0.35)',
+      border: '1px solid rgba(57, 255, 136, 0.35)',
       fontWeight: '700'
     },
     navIcon: {
