@@ -53,22 +53,14 @@ if (fs.existsSync(frontendDist)) {
   });
 }
 
-const http = require('http');
-const { initWebSocket } = require('./utils/websocket');
-
 // 404 handler for unmatched API requests or invalid paths
 app.use((req, res) => {
   res.status(404).json({ success: false, message: 'API endpoint or resource not found' });
 });
 
-// Create HTTP Server and initialize WebSocket
-const server = http.createServer(app);
-initWebSocket(server);
-
 // Start Server
-server.listen(PORT, HOST, () => {
+app.listen(PORT, HOST, () => {
   console.log(`[ELOQUENCE'26 Backend] Server running on http://${HOST}:${PORT}`);
-  console.log(`[ELOQUENCE'26 WebSocket] Real-time gateway active on ws://${HOST}:${PORT}/ws/registrations`);
 });
 
-module.exports = server;
+module.exports = app;

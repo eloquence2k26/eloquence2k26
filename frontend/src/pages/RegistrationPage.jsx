@@ -1111,27 +1111,65 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
           </div>
         </div>
 
-        {/* Stepper Navigation */}
+        {/* Stepper Navigation with Cyberpunk Energy Beam Connections */}
         {step !== 'success' && (
           <nav className="reg-stepper" aria-label="Registration Progress">
-            <div className={`reg-step-item ${step === 'participant' ? 'active' : ['team', 'review'].includes(step) ? 'completed' : ''}`}>
-              <span className="reg-step-num">01</span>
+            {/* Step 1: Participant Details */}
+            <div
+              className={`reg-step-item ${step === 'participant' ? 'active' : ['team', 'review'].includes(step) ? 'completed' : ''}`}
+              onClick={() => ['team', 'review'].includes(step) && setStep('participant')}
+              style={{ cursor: ['team', 'review'].includes(step) ? 'pointer' : 'default' }}
+              title={['team', 'review'].includes(step) ? 'Click to edit Participant Details' : 'Step 1: Participant Details'}
+            >
+              <span className="reg-step-num">
+                {['team', 'review'].includes(step) ? <FaCheck className="step-check-icon" /> : '01'}
+                {step === 'participant' && <span className="reg-step-pulse-ring" />}
+              </span>
               <span className="reg-step-label">PARTICIPANT DETAILS</span>
             </div>
-            <div className="reg-step-sep">/</div>
 
+            {/* Connector Beam 1 -> 2 */}
+            <div className={`reg-step-connector ${['team', 'review'].includes(step) ? 'connector-active' : ''}`}>
+              <div className="connector-track">
+                <div className="connector-fill" />
+                <div className="connector-laser-glow" />
+              </div>
+              <span className="connector-chevron">▶</span>
+            </div>
+
+            {/* Step 2: Team Details (if team event) */}
             {selectedEvent?.isTeam && (
               <>
-                <div className={`reg-step-item ${step === 'team' ? 'active' : step === 'review' ? 'completed' : ''}`}>
-                  <span className="reg-step-num">02</span>
+                <div
+                  className={`reg-step-item ${step === 'team' ? 'active' : step === 'review' ? 'completed' : ''}`}
+                  onClick={() => step === 'review' && setStep('team')}
+                  style={{ cursor: step === 'review' ? 'pointer' : 'default' }}
+                  title={step === 'review' ? 'Click to edit Team Details' : 'Step 2: Team Details'}
+                >
+                  <span className="reg-step-num">
+                    {step === 'review' ? <FaCheck className="step-check-icon" /> : '02'}
+                    {step === 'team' && <span className="reg-step-pulse-ring" />}
+                  </span>
                   <span className="reg-step-label">TEAM DETAILS</span>
                 </div>
-                <div className="reg-step-sep">/</div>
+
+                {/* Connector Beam 2 -> 3 */}
+                <div className={`reg-step-connector ${step === 'review' ? 'connector-active' : ''}`}>
+                  <div className="connector-track">
+                    <div className="connector-fill" />
+                    <div className="connector-laser-glow" />
+                  </div>
+                  <span className="connector-chevron">▶</span>
+                </div>
               </>
             )}
 
+            {/* Step 3 (or 2 for solo): Review & Confirm */}
             <div className={`reg-step-item ${step === 'review' ? 'active' : ''}`}>
-              <span className="reg-step-num">{selectedEvent?.isTeam ? '03' : '02'}</span>
+              <span className="reg-step-num">
+                {selectedEvent?.isTeam ? '03' : '02'}
+                {step === 'review' && <span className="reg-step-pulse-ring" />}
+              </span>
               <span className="reg-step-label">REVIEW & CONFIRM</span>
             </div>
           </nav>

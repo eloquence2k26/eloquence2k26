@@ -11,7 +11,6 @@ import {
   FaUsers,
   FaListOl,
   FaHeadset,
-  FaSpinner,
   FaBolt,
   FaLock,
   FaTimes,
@@ -23,6 +22,7 @@ import {
 } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { getApiUrl, getWsUrl } from '../config/api';
+import { getCachedEvents, fetchEventsData } from '../services/api.js';
 
 function VenueImageModal({ isOpen, onClose, event }) {
   useEffect(() => {
@@ -108,8 +108,11 @@ function VenueImageModal({ isOpen, onClose, event }) {
 }
 
 export default function EventRulesPage({ eventId, from, categoryFilter, onNavigate }) {
-  const [eventsList, setEventsList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const initialCache = getCachedEvents();
+  const initialFound = initialCache ? initialCache.find((e) => e.id === eventId || e.id?.toLowerCase() === eventId?.toLowerCase()) : null;
+
+  const [eventsList, setEventsList] = useState(() => initialCache || []);
+  const [loading, setLoading] = useState(() => !initialFound);
   const [liveCoordinators, setLiveCoordinators] = useState([]);
   const [isRegClosed, setIsRegClosed] = useState(false);
   const [showVenueModal, setShowVenueModal] = useState(false);
@@ -179,16 +182,15 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
-    fetch(getApiUrl('/api/events'))
-      .then((res) => res.json())
-      .then((result) => {
-        if (isMounted && result.success && Array.isArray(result.data)) {
-          setEventsList(result.data);
+    fetchEventsData()
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setEventsList(data);
+          setLoading(false);
         }
       })
       .catch((err) => {
-        console.error('Failed to load events from DB:', err);
+        console.warn('EventRulesPage fetch error:', err);
       })
       .finally(() => {
         if (isMounted) setLoading(false);
@@ -201,18 +203,19 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
   useEffect(() => {
     if (!event?.id) return;
     let isMounted = true;
+    const staticFallback = Array.isArray(event.coordinators) ? event.coordinators : [];
     fetch(getApiUrl(`/api/coordinators/event/${encodeURIComponent(event.id)}`))
       .then((res) => res.json())
       .then((result) => {
         if (!isMounted) return;
-        if (result.success && Array.isArray(result.data)) {
+        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
           setLiveCoordinators(result.data);
         } else {
-          setLiveCoordinators([]);
+          setLiveCoordinators(staticFallback);
         }
       })
       .catch(() => {
-        if (isMounted) setLiveCoordinators([]);
+        if (isMounted) setLiveCoordinators(staticFallback);
       });
     return () => { isMounted = false; };
   }, [event?.id]);
@@ -223,7 +226,9 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
 
   const coordsList = (Array.isArray(liveCoordinators) && liveCoordinators.length > 0)
     ? liveCoordinators
-    : (event && Array.isArray(event.coordinators) && event.coordinators.length > 0 ? event.coordinators : []);
+    : (event && Array.isArray(event.coordinators) && event.coordinators.length > 0
+        ? event.coordinators
+        : []);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -263,7 +268,7 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
     }
   };
 
-  if (loading) {
+  if (loading || !event) {
     return (
       <div className="event-rules-page" style={{ minHeight: '75vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <motion.div
@@ -318,20 +323,6 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
             </div>
           </div>
         </motion.div>
-      </div>
-    );
-  }
-
-  if (!event) {
-    return (
-      <div className="event-rules-page" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
-          <h2 style={{ color: '#ef4444', marginBottom: '0.5rem' }}>Event Not Found</h2>
-          <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>This competition does not exist or hasn't been added to the database yet.</p>
-          <button className="btn btn-primary" onClick={handleBackToEvents}>
-            <FaArrowLeft style={{ marginRight: '6px' }} /> Return to Events
-          </button>
-        </div>
       </div>
     );
   }

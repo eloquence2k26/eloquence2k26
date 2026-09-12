@@ -5,6 +5,7 @@ import Home from '../pages/Home.jsx';
 import EventsPage from '../pages/EventsPage.jsx';
 import EventRulesPage from '../pages/EventRulesPage.jsx';
 import RegistrationPage from '../pages/RegistrationPage.jsx';
+import { getCachedEvents, fetchEventsData } from '../services/api.js';
 
 const Admin = lazy(() => import('../pages/Admin.jsx'));
 
@@ -23,7 +24,7 @@ function parseHash(hash) {
 
   if (pathPart.startsWith('#/register/') || pathPart === '#/register' || pathPart.startsWith('#register')) {
     const parts = pathPart.split('/');
-    const id = parts[2] ? parts[2].trim() : (params.get('event') || null);
+    const id = parts[2] ? parts[2].trim() : null;
     let game = gameParam;
     if (!game && parts[3]) {
       const g = parts[3].toLowerCase();
@@ -41,7 +42,7 @@ function parseHash(hash) {
   }
   if (pathPart.startsWith('#/events/') || pathPart.startsWith('#/event/')) {
     const parts = pathPart.split('/');
-    const id = parts[2] ? parts[2].trim() : null;
+    const id = parts[2] ? parts[2].trim() : 'tech-01';
     return {
       page: 'event-rules',
       eventId: id,
@@ -72,26 +73,21 @@ export default function AppRouter() {
   });
   const checkIsAdminOrCoordinator = () => {
     const path = window.location.pathname;
-    const hash = window.location.hash || '';
-    return (
-      path.startsWith('/admin') ||
-      path.startsWith('/coordinators') ||
-      hash.startsWith('#/admin') ||
-      hash.startsWith('#admin') ||
-      hash.startsWith('#/coordinators') ||
-      hash.startsWith('#coordinators')
-    );
+    return path.startsWith('/admin') || path.startsWith('/coordinators');
   };
 
   const [isAdminRoute, setIsAdminRoute] = useState(checkIsAdminOrCoordinator);
 
   useEffect(() => {
+    fetchEventsData().catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const handleHashChange = () => {
       setRoute(parseHash(window.location.hash));
-      setIsAdminRoute(checkIsAdminOrCoordinator());
     };
 
-    // Popstate listener to detect path changes for admin & coordinators
+    // Minimal popstate listener to detect path changes for admin & coordinators
     const handlePopState = () => {
       setIsAdminRoute(checkIsAdminOrCoordinator());
     };
@@ -164,14 +160,6 @@ export default function AppRouter() {
         window.history.pushState({ from: null }, '', '#/events');
       } catch (e) {}
       window.location.hash = '/events';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (page === 'admin') {
-      setIsAdminRoute(true);
-      try {
-        window.history.pushState({}, '', '/admin');
-      } catch (e) {
-        window.location.hash = '/admin';
-      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       const sectionId = typeof extra === 'string' ? extra : null;

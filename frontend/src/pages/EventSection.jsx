@@ -1,39 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
+import { getCachedEvents, fetchEventsData } from '../services/api.js';
 import EventCard from './EventCard.jsx';
-import { getApiUrl } from '../config/api';
 
 export default function EventSection({ onRegister, onViewRules }) {
-  const [eventsList, setEventsList] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const initialCache = getCachedEvents();
+  const [eventsList, setEventsList] = useState(() => initialCache || []);
   const [filter, setFilter] = useState('all');
   const [visible, setVisible] = useState(false);
   const sectionRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
-    fetch(getApiUrl('/api/events'))
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((result) => {
-        if (isMounted && result.success && Array.isArray(result.data)) {
-          const sorted = [...result.data].sort((a, b) => {
-            if (a.category !== b.category) {
-              return a.category === 'technical' ? -1 : 1;
-            }
-            return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
-          });
-          setEventsList(sorted);
-        }
-      })
-      .catch((err) => {
-        console.warn('Failed to fetch events from DB for EventSection:', err);
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
+    fetchEventsData().then((data) => {
+      if (isMounted && Array.isArray(data) && data.length > 0) {
+        setEventsList(data);
+      }
+    });
     return () => {
       isMounted = false;
     };
@@ -75,57 +56,35 @@ export default function EventSection({ onRegister, onViewRules }) {
         ))}
       </div>
 
-      {loading ? (
-        <div className="events-skeleton-grid" style={{ marginTop: '2rem' }}>
-          {[...Array(3)].map((_, i) => (
-            <div key={`section-skel-${i}`} className="event-card-skeleton">
-              <div className="skeleton-banner">
-                <div className="skeleton-shimmer-sweep" />
-              </div>
-              <div className="skeleton-content">
-                <div className="skeleton-row-header">
-                  <div className="skeleton-circle-icon" />
-                  <div className="skeleton-title-bar" />
-                </div>
-                <div className="skeleton-line full" />
-                <div className="skeleton-line half" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
+      {showTech && (
         <>
-          {showTech && (
-            <>
-              <div className="category-label">TECHNICAL EVENTS</div>
-              <div className="events-grid">
-                {techEvents.map((event) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    onRegister={onRegister}
-                    onViewRules={onViewRules}
-                  />
-                ))}
-              </div>
-            </>
-          )}
+          <div className="category-label">TECHNICAL EVENTS</div>
+          <div className="events-grid">
+            {techEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                onRegister={onRegister}
+                onViewRules={onViewRules}
+              />
+            ))}
+          </div>
+        </>
+      )}
 
-          {showNonTech && (
-            <>
-              <div className="category-label">NON-TECHNICAL EVENTS</div>
-              <div className="events-grid">
-                {nonTechEvents.map((event) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    onRegister={onRegister}
-                    onViewRules={onViewRules}
-                  />
-                ))}
-              </div>
-            </>
-          )}
+      {showNonTech && (
+        <>
+          <div className="category-label">NON-TECHNICAL EVENTS</div>
+          <div className="events-grid">
+            {nonTechEvents.map((event) => (
+              <EventCard
+                key={event.id}
+                event={event}
+                onRegister={onRegister}
+                onViewRules={onViewRules}
+              />
+            ))}
+          </div>
         </>
       )}
     </section>

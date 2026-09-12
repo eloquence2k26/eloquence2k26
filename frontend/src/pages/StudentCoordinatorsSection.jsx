@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import studentCoordinators from '../data/studentCoordinators.json';
 import ShaderCard from '../components/ShaderCard.jsx';
 import { fetchPublicHomepageCoordinators } from '../services/api.js';
 
@@ -205,24 +206,22 @@ function CoordinatorSlideCard({ item, index }) {
 
 export default function StudentCoordinatorsSection() {
   const sectionRef = useRef(null);
-  const [visible, setVisible] = useState(true);
-  const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [visible, setVisible] = useState(false);
+  const [teams, setTeams] = useState(studentCoordinators);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) setVisible(true);
       },
-      { threshold: 0.05 }
+      { threshold: 0.1 }
     );
     if (sectionRef.current) observer.observe(sectionRef.current);
     return () => observer.disconnect();
-  }, [teams]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
     fetchPublicHomepageCoordinators()
       .then((liveTeams) => {
         if (isMounted && Array.isArray(liveTeams) && liveTeams.length > 0) {
@@ -230,24 +229,22 @@ export default function StudentCoordinatorsSection() {
         }
       })
       .catch((err) => {
-        console.warn('Failed to fetch homepage coordinators from DB:', err);
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
+        console.warn('Fallback to local student coordinators:', err);
       });
     return () => {
       isMounted = false;
     };
   }, []);
 
-  const activeTeams = (Array.isArray(teams) ? teams : []).filter(
+  const activeTeams = (teams && teams.length > 0 ? teams : studentCoordinators).filter(
     (t) => t.isActive !== false
   );
+  const displayList = activeTeams.length > 0 ? activeTeams : studentCoordinators;
 
   // Build 2 perfectly matched halves so 50% translation loop is always 100% seamless without jumps
-  const repeatPerHalf = activeTeams.length > 0 ? Math.max(1, Math.ceil(6 / activeTeams.length)) : 0;
-  const halfList = repeatPerHalf > 0 ? Array(repeatPerHalf).fill(activeTeams).flat() : [];
-  const loopItems = halfList.length > 0 ? [...halfList, ...halfList] : [];
+  const repeatPerHalf = Math.max(1, Math.ceil(6 / (displayList.length || 1)));
+  const halfList = Array(repeatPerHalf).fill(displayList).flat();
+  const loopItems = [...halfList, ...halfList];
 
   return (
     <section
@@ -270,19 +267,13 @@ export default function StudentCoordinatorsSection() {
         <div className="student-coordinators-marquee-fade marquee-fade-left" />
         <div className="student-coordinators-marquee-fade marquee-fade-right" />
         <div className="student-coordinators-track">
-          {loopItems.length > 0 ? (
-            loopItems.map((item, i) => (
-              <CoordinatorSlideCard
-                key={`${item.id}-${i}`}
-                item={item}
-                index={i}
-              />
-            ))
-          ) : (
-            <div style={{ textAlign: 'center', width: '100%', padding: '2rem', color: '#94a3b8' }}>
-              {loading ? 'Loading student coordinators...' : ''}
-            </div>
-          )}
+          {loopItems.map((item, i) => (
+            <CoordinatorSlideCard
+              key={`${item.id}-${i}`}
+              item={item}
+              index={i}
+            />
+          ))}
         </div>
       </div>
     </section>

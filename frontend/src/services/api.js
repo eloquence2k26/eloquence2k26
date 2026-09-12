@@ -336,3 +336,54 @@ export async function updateRegistrationStatus(token, payload) {
   return res.json();
 }
 
+// ==================== EVENTS CACHING & FETCHING ====================
+let inMemoryEventsCache = null;
+
+export function getCachedEvents() {
+  if (inMemoryEventsCache && Array.isArray(inMemoryEventsCache) && inMemoryEventsCache.length > 0) {
+    return inMemoryEventsCache;
+  }
+  try {
+    const raw = sessionStorage.getItem('eloquence_db_events');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        inMemoryEventsCache = parsed;
+        return parsed;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+export function setCachedEvents(events) {
+  if (Array.isArray(events) && events.length > 0) {
+    inMemoryEventsCache = events;
+    try {
+      sessionStorage.setItem('eloquence_db_events', JSON.stringify(events));
+    } catch (_) {}
+  }
+}
+
+export async function fetchEventsData() {
+  try {
+    const res = await fetch(getApiUrl('/api/events'));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await res.json();
+    if (result.success && Array.isArray(result.data) && result.data.length > 0) {
+      const sorted = [...result.data].sort((a, b) => {
+        if (a.category !== b.category) {
+          return a.category === 'technical' ? -1 : 1;
+        }
+        return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
+      });
+      setCachedEvents(sorted);
+      return sorted;
+    }
+  } catch (err) {
+    console.warn('Error fetching events from DB:', err);
+  }
+  return getCachedEvents() || [];
+}
+
+
