@@ -85,24 +85,41 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
     return ['tech-01'];
   }, [user, coordinatorsList]);
 
-  const [selectedEventId, setSelectedEventId] = useState(() => userAllocatedEventIds[0] || 'tech-01');
+  // List of events strictly allocated to this coordinator
+  const allocatedEventsList = useMemo(() => {
+    if (!userAllocatedEventIds || userAllocatedEventIds.length === 0) {
+      return eventsList.length > 0 ? [eventsList[0]] : defaultEvents.slice(0, 1);
+    }
+    const filtered = eventsList.filter(e => {
+      const eId = (e.id || '').toLowerCase().trim();
+      return userAllocatedEventIds.some(allocId => {
+        const aId = String(allocId || '').toLowerCase().trim();
+        return aId === eId || aId === eId.replace('-', '') || aId.replace('-', '') === eId;
+      });
+    });
+    return filtered.length > 0 ? filtered : [eventsList[0] || defaultEvents[0]];
+  }, [eventsList, userAllocatedEventIds]);
+
+  const [selectedEventId, setSelectedEventId] = useState(() => {
+    return userAllocatedEventIds[0] || 'tech-01';
+  });
 
   useEffect(() => {
-    if (userAllocatedEventIds.length > 0 && !userAllocatedEventIds.includes(selectedEventId)) {
-      setSelectedEventId(userAllocatedEventIds[0]);
+    if (allocatedEventsList.length > 0 && !allocatedEventsList.some(e => e.id === selectedEventId)) {
+      setSelectedEventId(allocatedEventsList[0].id);
     }
-  }, [userAllocatedEventIds]);
+  }, [allocatedEventsList, selectedEventId]);
 
   // Current allocated event object
   const currentEvent = useMemo(() => {
-    return eventsList.find(e => e.id === selectedEventId) || eventsList[0] || {
+    return allocatedEventsList.find(e => e.id === selectedEventId) || allocatedEventsList[0] || {
       id: selectedEventId,
       name: 'Allocated Event',
       category: 'technical',
       fee: 250,
       isTeam: false
     };
-  }, [eventsList, selectedEventId]);
+  }, [allocatedEventsList, selectedEventId]);
 
   // Current event's rules and rounds
   const currentEventRuleData = useMemo(() => {
@@ -486,17 +503,37 @@ export default function EventCoordinatorDashboard({ token, user, onLogout }) {
           {/* Assigned Event Selector */}
           <div style={S.eventSelectorWrap}>
             <span style={S.eventSelectorLabel}>ALLOCATED EVENT:</span>
-            <select
-              value={selectedEventId}
-              onChange={(e) => setSelectedEventId(e.target.value)}
-              style={S.eventSelectDropdown}
-            >
-              {eventsList.map(evt => (
-                <option key={evt.id} value={evt.id}>
-                  {evt.name} ({evt.category === 'technical' ? 'TECH' : 'NON-TECH'})
-                </option>
-              ))}
-            </select>
+            {allocatedEventsList.length > 1 ? (
+              <select
+                value={selectedEventId}
+                onChange={(e) => setSelectedEventId(e.target.value)}
+                style={S.eventSelectDropdown}
+              >
+                {allocatedEventsList.map(evt => (
+                  <option key={evt.id} value={evt.id}>
+                    {evt.name} ({evt.category === 'technical' ? 'TECH' : 'NON-TECH'})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div style={{
+                background: isDark ? 'rgba(57, 255, 136, 0.12)' : '#ecfdf5',
+                border: '1px solid rgba(57, 255, 136, 0.35)',
+                color: isDark ? '#39FF88' : '#047857',
+                padding: '0.4rem 0.85rem',
+                borderRadius: '8px',
+                fontWeight: '700',
+                fontSize: '0.85rem',
+                letterSpacing: '0.02em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#39FF88', boxShadow: '0 0 8px #39FF88' }} />
+                <span>{currentEvent.name}</span>
+                <span style={{ opacity: 0.8, fontSize: '0.75rem' }}>({currentEvent.category === 'technical' ? 'TECH' : 'NON-TECH'})</span>
+              </div>
+            )}
           </div>
 
           {/* Theme Toggle */}

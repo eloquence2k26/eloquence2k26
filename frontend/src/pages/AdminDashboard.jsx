@@ -75,7 +75,9 @@ import {
   updateHomepageCoordinatorTeam,
   toggleHomepageCoordinatorTeam,
   deleteHomepageCoordinatorTeam,
-  updateRegistrationStatus
+  updateRegistrationStatus,
+  fetchEventAllocations,
+  updateEventAllocation
 } from '../services/api.js';
 
 const EXISTING_POSTER_PRESETS = [
@@ -842,7 +844,135 @@ export default function AdminDashboard({ token, user, onLogout }) {
   const [closeRgPendingAction, setCloseRgPendingAction] = useState('close'); // 'close' | 'open'
   const [customClosedReason, setCustomClosedReason] = useState('');
   const [isTogglingCloseRg, setIsTogglingCloseRg] = useState(false);
-  const [isSavingCustomReason, setIsSavingCustomReason] = useState(false);
+  // ==================== EVENT ALLOCATION STATE ====================
+  const [allocUsersList, setAllocUsersList] = useState([]);
+  const [allocUserSearch, setAllocUserSearch] = useState('');
+  const [isAllocModalOpen, setIsAllocModalOpen] = useState(false);
+  const [selectedAllocUser, setSelectedAllocUser] = useState(null);
+  const [selectedAllocEvents, setSelectedAllocEvents] = useState([]);
+  const [isSavingAlloc, setIsSavingAlloc] = useState(false);
+
+  // Quick Create Coordinator Account with Allocation
+  const [isCreateCoordLoginModalOpen, setIsCreateCoordLoginModalOpen] = useState(false);
+  const [newCoordUsername, setNewCoordUsername] = useState('');
+  const [newCoordPassword, setNewCoordPassword] = useState('');
+  const [newCoordRole, setNewCoordRole] = useState('Lead Coordinator');
+  const [newCoordAllocEvents, setNewCoordAllocEvents] = useState(['tech-01']);
+  const [isCreatingCoordLogin, setIsCreatingCoordLogin] = useState(false);
+
+  const fetchAllocations = () => {
+    fetchEventAllocations(token)
+      .then(result => {
+        if (result.success && result.data?.users) {
+          setAllocUsersList(result.data.users);
+        }
+      })
+      .catch(err => console.warn('Error fetching event allocations:', err));
+  };
+
+  const handleOpenAllocModal = (userItem) => {
+    setSelectedAllocUser(userItem);
+    setSelectedAllocEvents(Array.isArray(userItem.assignedEvents) ? [...userItem.assignedEvents] : (userItem.eventId ? [userItem.eventId] : []));
+    setIsAllocModalOpen(true);
+  };
+
+  const handleToggleAllocEvent = (eventId) => {
+    setSelectedAllocEvents(prev => {
+      if (prev.includes(eventId)) {
+        return prev.filter(id => id !== eventId);
+      } else {
+        return [...prev, eventId];
+      }
+    });
+  };
+
+  const handleSaveAllocations = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedAllocUser) return;
+
+    setIsSavingAlloc(true);
+    const toastId = toast.loading(`Saving event allocation for ${selectedAllocUser.username}...`);
+
+    try {
+      const res = await updateEventAllocation({
+        userId: selectedAllocUser.id,
+        username: selectedAllocUser.username,
+        assignedEvents: selectedAllocEvents
+      }, token);
+
+      if (res.success) {
+        toast.success(`Allocated ${selectedAllocEvents.length} event(s) to ${selectedAllocUser.username}!`, { id: toastId });
+        setAllocUsersList(prev => prev.map(u => {
+          if (u.id === selectedAllocUser.id || u.username === selectedAllocUser.username) {
+            return { ...u, assignedEvents: selectedAllocEvents, eventId: selectedAllocEvents[0] || null };
+          }
+          return u;
+        }));
+        setIsAllocModalOpen(false);
+        fetchUsers();
+        fetchCoordinators();
+      } else {
+        toast.error(res.message || 'Failed to update allocation', { id: toastId });
+      }
+    } catch (err) {
+      toast.error('Network error saving allocation', { id: toastId });
+    } finally {
+      setIsSavingAlloc(false);
+    }
+  };
+
+  const handleCreateCoordWithAlloc = async (e) => {
+    e.preventDefault();
+    if (!newCoordUsername.trim() || !newCoordPassword.trim()) {
+      return toast.error('Please enter username and password');
+    }
+
+    setIsCreatingCoordLogin(true);
+    const toastId = toast.loading(`Creating coordinator account for ${newCoordUsername}...`);
+
+    try {
+      // 1. Create user
+      const userRes = await fetch(getApiUrl('/api/admin/users'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          username: newCoordUsername.trim(),
+          password: newCoordPassword.trim(),
+          role: newCoordRole
+        })
+      });
+      const userData = await userRes.json();
+
+      if (!userData.success) {
+        toast.error(userData.message || 'Failed to create user', { id: toastId });
+        setIsCreatingCoordLogin(false);
+        return;
+      }
+
+      // 2. Allocate events to newly created user
+      await updateEventAllocation({
+        userId: userData.data?.id,
+        username: newCoordUsername.trim(),
+        assignedEvents: newCoordAllocEvents
+      }, token);
+
+      toast.success(`Coordinator account "${newCoordUsername}" created & allocated to ${newCoordAllocEvents.length} event(s)!`, { id: toastId, duration: 5000 });
+      setIsCreateCoordLoginModalOpen(false);
+      setNewCoordUsername('');
+      setNewCoordPassword('');
+      setNewCoordAllocEvents(['tech-01']);
+      fetchUsers();
+      fetchAllocations();
+      fetchCoordinators();
+    } catch (err) {
+      toast.error('Network error creating coordinator account', { id: toastId });
+    } finally {
+      setIsCreatingCoordLogin(false);
+    }
+  };
 
   const fetchRegistrationSettings = () => {
     fetch(getApiUrl('/api/registration-status'))
@@ -1000,6 +1130,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
     fetchHomepageTeams();
     fetchRegistrations();
     fetchRegistrationSettings();
+    fetchAllocations();
   }, [token]);
 
   // Handle ESC key to close modal overlays
@@ -2453,6 +2584,25 @@ export default function AdminDashboard({ token, user, onLogout }) {
             </div>
           </button>
 
+          {/* Event Allocate Tab (Admin / Superadmin) */}
+          {isAdminOrSuper && (
+            <button 
+              type="button"
+              style={activeTab === 'allocate-events' ? { ...S.navItem, ...S.navItemActive } : S.navItem} 
+              onClick={(e) => { e.preventDefault(); setActiveTab('allocate-events'); setMobileSidebarOpen(false); }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <FaCalendarAlt style={S.navIcon} />
+                  <span>Event Allocate</span>
+                </div>
+                <span style={{ ...S.badgeCount, background: isDark ? '#064e3b' : '#ecfdf5', color: isDark ? '#6ee7b7' : '#047857', fontWeight: '800' }}>
+                  ALLOC
+                </span>
+              </div>
+            </button>
+          )}
+
           {/* Homepage Student-Coordinator Team Tab */}
           <button 
             type="button"
@@ -2566,6 +2716,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
               {activeTab === 'manage-roles' && 'Role Management'}
               {activeTab === 'manage-sponsors' && 'Sponsor Management'}
               {activeTab === 'manage-coordinators' && 'Event Coordinators Management'}
+              {activeTab === 'allocate-events' && 'Event Coordinator Allocation'}
               {activeTab === 'homepage-coordinators' && 'Homepage Student-Coordinator Team'}
               {activeTab === 'registrations' && 'Participant Registrations & Verification'}
               {activeTab === 'search-participant' && 'Search & Verify Participant (QR Check-in)'}
@@ -2579,6 +2730,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
               {activeTab === 'manage-roles' && 'Configure custom access roles, permissions, and security hierarchy.'}
               {activeTab === 'manage-sponsors' && (isLeadCoordinator ? 'View event partners, sponsorship categories, and contact information.' : 'Manage event partners, categories, logos, contact info, and public visibility.')}
               {activeTab === 'manage-coordinators' && (isLeadCoordinator ? 'View student coordinators assigned across symposium events.' : 'Assign student leads and coordinators dynamically to symposium events.')}
+              {activeTab === 'allocate-events' && 'Allocate specific events to coordinator accounts. Coordinators can only see and manage their allocated event(s).'}
               {activeTab === 'homepage-coordinators' && (isLeadCoordinator ? 'View student coordinator teams displayed on the symposium homepage marquee.' : 'Manage student coordinator teams (Main Coordinator Team, Website Coordinator Team, etc.) displayed dynamically on the homepage marquee.')}
               {activeTab === 'registrations' && (isLeadCoordinator ? 'View all registered participants, verify ticket codes, and audit payment status.' : 'View and manage live online portal and offline on-site desk participant registrations with payment and ticket audit.')}
               {activeTab === 'search-participant' && 'Search by ticket code, name, phone, email, college or scan participant ticket QR code for live on-site verification & admission.'}
@@ -3686,6 +3838,425 @@ export default function AdminDashboard({ token, user, onLogout }) {
                       ))}
                       {!filteredCoordinators.length && (
                         <tr><td colSpan={6} style={S.emptyState}>No coordinators found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* EVENT ALLOCATE (COORDINATOR ALLOCATION MANAGEMENT)        */}
+          {/* ======================================================== */}
+          {activeTab === 'allocate-events' && isAdminOrSuper && (
+            <div style={S.viewContainer}>
+              {/* Metrics Overview Bar */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '1rem',
+                marginBottom: '1.5rem'
+              }}>
+                <div style={{
+                  background: isDark ? '#111827' : '#ffffff',
+                  border: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '1.2rem 1.4rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px'
+                }}>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    background: isDark ? 'rgba(59, 130, 246, 0.15)' : '#eff6ff',
+                    color: '#3b82f6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                    flexShrink: 0
+                  }}>
+                    <FaUsers />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: isDark ? '#9ca3af' : '#64748b' }}>
+                      Coordinator Logins
+                    </div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: isDark ? '#f9fafb' : '#0f172a', marginTop: '2px' }}>
+                      {allocUsersList.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: isDark ? '#111827' : '#ffffff',
+                  border: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '1.2rem 1.4rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px'
+                }}>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    background: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5',
+                    color: '#10b981',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                    flexShrink: 0
+                  }}>
+                    <FaCheckCircle />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: isDark ? '#9ca3af' : '#64748b' }}>
+                      Allocated Accounts
+                    </div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#10b981', marginTop: '2px' }}>
+                      {allocUsersList.filter(u => (Array.isArray(u.assignedEvents) && u.assignedEvents.length > 0) || u.eventId).length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: isDark ? '#111827' : '#ffffff',
+                  border: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '1.2rem 1.4rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px'
+                }}>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    background: isDark ? 'rgba(217, 70, 239, 0.15)' : '#fdf2f8',
+                    color: '#d946ef',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                    flexShrink: 0
+                  }}>
+                    <FaCalendarAlt />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: isDark ? '#9ca3af' : '#64748b' }}>
+                      Symposium Events
+                    </div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: '800', color: isDark ? '#f9fafb' : '#0f172a', marginTop: '2px' }}>
+                      {eventsList.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: isDark ? '#111827' : '#ffffff',
+                  border: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '1.2rem 1.4rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px'
+                }}>
+                  <div style={{
+                    width: '46px',
+                    height: '46px',
+                    borderRadius: '12px',
+                    background: isDark ? 'rgba(245, 158, 11, 0.15)' : '#fefce8',
+                    color: '#f59e0b',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.25rem',
+                    flexShrink: 0
+                  }}>
+                    <FaShieldAlt />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: isDark ? '#9ca3af' : '#64748b' }}>
+                      Access Policy
+                    </div>
+                    <div style={{ fontSize: '0.92rem', fontWeight: '800', color: '#10b981', marginTop: '4px' }}>
+                      Scoped to Assigned
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action & Search Bar */}
+              <div style={{
+                background: isDark ? '#111827' : '#ffffff',
+                padding: '1.25rem 1.5rem',
+                borderRadius: '16px',
+                border: isDark ? '1px solid #1f2937' : '1px solid #e2e8f0',
+                marginBottom: '1.5rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '1rem'
+              }}>
+                <div style={{ flex: 1, minWidth: '260px', maxWidth: '420px', position: 'relative' }}>
+                  <input
+                    type="text"
+                    placeholder="Search coordinator username, role, or allocated event..."
+                    value={allocUserSearch}
+                    onChange={(e) => setAllocUserSearch(e.target.value)}
+                    style={{
+                      ...S.searchInput,
+                      width: '100%',
+                      paddingLeft: '2.5rem'
+                    }}
+                  />
+                  <FaSearch style={{
+                    position: 'absolute',
+                    left: '0.85rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: isDark ? '#6b7280' : '#94a3b8',
+                    fontSize: '0.9rem'
+                  }} />
+                  {allocUserSearch && (
+                    <button
+                      onClick={() => setAllocUserSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: '0.75rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: isDark ? '#9ca3af' : '#64748b',
+                        cursor: 'pointer',
+                        padding: '4px'
+                      }}
+                    >
+                      <FaTimes size={12} />
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <button
+                    onClick={fetchAllocations}
+                    style={{
+                      ...S.filterBtn,
+                      padding: '0.55rem 0.85rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                    title="Reload allocations"
+                  >
+                    <FaSyncAlt size={12} />
+                    <span>Refresh</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setNewCoordUsername('');
+                      setNewCoordPassword('');
+                      setNewCoordAllocEvents(['tech-01']);
+                      setIsCreateCoordLoginModalOpen(true);
+                    }}
+                    style={{
+                      ...S.primaryBtn,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '0.65rem 1.25rem',
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
+                      fontWeight: '700'
+                    }}
+                  >
+                    <FaPlus />
+                    <span>New Coordinator Account</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Allocations Table */}
+              <div style={S.card}>
+                <div style={S.cardHeaderFlex}>
+                  <div>
+                    <h3 style={S.cardTitle}>Coordinator Event Allocation Matrix</h3>
+                    <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.8rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                      When a coordinator logs in, their portal will strictly display ONLY the events allocated below.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={S.tableResponsive}>
+                  <table style={S.table}>
+                    <thead>
+                      <tr>
+                        <th style={S.th}>Coordinator Account</th>
+                        <th style={S.th}>Role</th>
+                        <th style={S.th}>Allocated Event(s)</th>
+                        <th style={S.th}>Status</th>
+                        <th style={{ ...S.th, textAlign: 'right' }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allocUsersList
+                        .filter(u => {
+                          const q = allocUserSearch.toLowerCase().trim();
+                          if (!q) return true;
+                          const uName = (u.username || '').toLowerCase();
+                          const uRole = (u.role || '').toLowerCase();
+                          const assigned = (Array.isArray(u.assignedEvents) ? u.assignedEvents.join(' ') : (u.eventId || '')).toLowerCase();
+                          return uName.includes(q) || uRole.includes(q) || assigned.includes(q);
+                        })
+                        .map(userItem => {
+                          const assigned = Array.isArray(userItem.assignedEvents) ? userItem.assignedEvents : (userItem.eventId ? [userItem.eventId] : []);
+                          const isAllocated = assigned.length > 0;
+
+                          return (
+                            <tr key={userItem.id || userItem.username} style={S.tr}>
+                              <td style={S.td}>
+                                <div style={S.userCell}>
+                                  <div style={{
+                                    ...S.userAvatarSm,
+                                    background: isDark ? 'rgba(57, 255, 136, 0.15)' : '#ecfdf5',
+                                    color: isDark ? '#39FF88' : '#047857',
+                                    border: '1px solid rgba(57, 255, 136, 0.3)'
+                                  }}>
+                                    {(userItem.username || 'U').charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div style={S.strongText}>{userItem.username}</div>
+                                    <div style={S.tableSubText}>ID: #{userItem.id}</div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td style={S.td}>
+                                <span style={{
+                                  ...S.roleBadge,
+                                  background: isDark ? '#1e293b' : '#f1f5f9',
+                                  color: isDark ? '#93c5fd' : '#1e40af',
+                                  border: isDark ? '1px solid #334155' : '1px solid #cbd5e1'
+                                }}>
+                                  {userItem.role}
+                                </span>
+                              </td>
+
+                              <td style={S.td}>
+                                {isAllocated ? (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {assigned.map(evtId => {
+                                      const evtObj = eventsList.find(e => e.id === evtId);
+                                      const isTech = String(evtId).toLowerCase().startsWith('tech');
+                                      return (
+                                        <span
+                                          key={evtId}
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '5px',
+                                            background: isDark 
+                                              ? (isTech ? 'rgba(56, 189, 248, 0.15)' : 'rgba(236, 72, 153, 0.15)') 
+                                              : (isTech ? '#eff6ff' : '#fdf2f8'),
+                                            color: isDark 
+                                              ? (isTech ? '#38bdf8' : '#f472b6') 
+                                              : (isTech ? '#0284c7' : '#db2777'),
+                                            border: isDark 
+                                              ? (isTech ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(236, 72, 153, 0.3)') 
+                                              : (isTech ? '1px solid #bae6fd' : '1px solid #fbcfe8'),
+                                            padding: '0.25rem 0.65rem',
+                                            borderRadius: '8px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: '700'
+                                          }}
+                                        >
+                                          <span style={{ fontSize: '0.65rem', opacity: 0.8, textTransform: 'uppercase' }}>
+                                            {evtId}
+                                          </span>
+                                          <span>• {evtObj ? evtObj.name : evtId}</span>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <span style={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <FaExclamationTriangle size={12} /> No Events Allocated (Cannot view events)
+                                  </span>
+                                )}
+                              </td>
+
+                              <td style={S.td}>
+                                {isAllocated ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    background: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5',
+                                    color: '#10b981',
+                                    padding: '0.25rem 0.65rem',
+                                    borderRadius: '999px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '800'
+                                  }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
+                                    {assigned.length} {assigned.length === 1 ? 'Event' : 'Events'} Active
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    background: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2',
+                                    color: '#ef4444',
+                                    padding: '0.25rem 0.65rem',
+                                    borderRadius: '999px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '800'
+                                  }}>
+                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
+                                    Unassigned
+                                  </span>
+                                )}
+                              </td>
+
+                              <td style={{ ...S.td, textAlign: 'right' }}>
+                                <button
+                                  onClick={() => handleOpenAllocModal(userItem)}
+                                  style={{
+                                    ...S.primaryBtn,
+                                    background: isDark ? '#1e3a8a' : '#2563eb',
+                                    padding: '0.45rem 0.9rem',
+                                    fontSize: '0.82rem',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    borderRadius: '8px'
+                                  }}
+                                  title={`Allocate events to ${userItem.username}`}
+                                >
+                                  <FaCalendarAlt size={12} />
+                                  <span>{isAllocated ? 'Edit Allocation' : 'Allocate Event'}</span>
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+
+                      {allocUsersList.length === 0 && (
+                        <tr>
+                          <td colSpan={5} style={S.emptyState}>
+                            No coordinator accounts found. Click "New Coordinator Account" to create one.
+                          </td>
+                        </tr>
                       )}
                     </tbody>
                   </table>
@@ -7957,6 +8528,358 @@ export default function AdminDashboard({ token, user, onLogout }) {
                 <span>{closeRgPendingAction === 'close' ? 'Yes, Close Registrations' : 'Yes, Re-Open Registrations'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ======================================================== */}
+      {/* MODAL: EVENT ALLOCATION FOR COORDINATOR USER              */}
+      {/* ======================================================== */}
+      {isAllocModalOpen && selectedAllocUser && (
+        <div style={S.modalBackdrop} onClick={() => setIsAllocModalOpen(false)}>
+          <div style={{ ...S.modalCard, maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div style={S.modalHeader}>
+              <div style={S.modalHeaderLeft}>
+                <div style={{ ...S.modalIconBox, background: isDark ? 'rgba(57, 255, 136, 0.15)' : '#ecfdf5', color: '#10b981' }}>
+                  <FaCalendarAlt size={18} />
+                </div>
+                <div>
+                  <h3 style={S.modalTitle}>
+                    Allocate Events: {selectedAllocUser.username}
+                  </h3>
+                  <p style={S.modalSubtitle}>
+                    Role: <strong>{selectedAllocUser.role}</strong> • Choose which event(s) this coordinator can access
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIsAllocModalOpen(false)} style={S.modalCloseBtn}>✕</button>
+            </div>
+
+            <form onSubmit={handleSaveAllocations} style={S.modalForm}>
+              <div style={S.modalFormBody}>
+                {/* Quick Selection Shortcuts */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const techIds = eventsList.filter(e => e.category === 'technical').map(e => e.id);
+                      setSelectedAllocEvents(prev => Array.from(new Set([...prev, ...techIds])));
+                    }}
+                    style={{ ...S.filterBtn, fontSize: '0.78rem', padding: '0.35rem 0.75rem' }}
+                  >
+                    + All Technical ({eventsList.filter(e => e.category === 'technical').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nonTechIds = eventsList.filter(e => e.category === 'non-technical').map(e => e.id);
+                      setSelectedAllocEvents(prev => Array.from(new Set([...prev, ...nonTechIds])));
+                    }}
+                    style={{ ...S.filterBtn, fontSize: '0.78rem', padding: '0.35rem 0.75rem' }}
+                  >
+                    + All Non-Technical ({eventsList.filter(e => e.category === 'non-technical').length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAllocEvents(eventsList.map(e => e.id))}
+                    style={{ ...S.filterBtn, fontSize: '0.78rem', padding: '0.35rem 0.75rem' }}
+                  >
+                    Select All 12
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAllocEvents([])}
+                    style={{ ...S.filterBtn, fontSize: '0.78rem', padding: '0.35rem 0.75rem', color: '#ef4444' }}
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+
+                {/* Event Selection Grid */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: '10px',
+                  maxHeight: '380px',
+                  overflowY: 'auto',
+                  paddingRight: '4px'
+                }}>
+                  {eventsList.map(evt => {
+                    const isSelected = selectedAllocEvents.includes(evt.id);
+                    const isTech = evt.category === 'technical';
+
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => handleToggleAllocEvent(evt.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '0.75rem 1rem',
+                          borderRadius: '12px',
+                          border: isSelected
+                            ? '2px solid #10b981'
+                            : (isDark ? '1px solid #374151' : '1px solid #e2e8f0'),
+                          background: isSelected
+                            ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5')
+                            : (isDark ? '#1f2937' : '#ffffff'),
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          boxShadow: isSelected ? '0 0 12px rgba(16, 185, 129, 0.2)' : 'none'
+                        }}
+                      >
+                        <div style={{
+                          width: '22px',
+                          height: '22px',
+                          borderRadius: '6px',
+                          border: isSelected ? '2px solid #10b981' : (isDark ? '2px solid #4b5563' : '2px solid #cbd5e1'),
+                          background: isSelected ? '#10b981' : 'transparent',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '0.75rem',
+                          flexShrink: 0
+                        }}>
+                          {isSelected && <FaCheck />}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontSize: '0.88rem',
+                            fontWeight: '700',
+                            color: isDark ? '#f9fafb' : '#0f172a',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            {evt.name}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                            <span style={{
+                              fontSize: '0.68rem',
+                              fontWeight: '800',
+                              color: isTech ? (isDark ? '#38bdf8' : '#0284c7') : (isDark ? '#f472b6' : '#db2777'),
+                              textTransform: 'uppercase'
+                            }}>
+                              {evt.id}
+                            </span>
+                            <span style={{ fontSize: '0.68rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                              • {isTech ? 'Technical' : 'Non-Technical'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Scoped Access Warning / Info */}
+                <div style={{
+                  background: isDark ? '#1e293b' : '#f8fafc',
+                  border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '0.85rem 1rem',
+                  fontSize: '0.82rem',
+                  color: isDark ? '#cbd5e1' : '#475569',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <FaInfoCircle style={{ color: '#3b82f6', flexShrink: 0 }} size={16} />
+                  <div>
+                    <strong>{selectedAllocEvents.length} event(s) selected:</strong> When <strong>{selectedAllocUser.username}</strong> logs in, their dashboard and participant rosters will strictly only show these allocated events.
+                  </div>
+                </div>
+              </div>
+
+              <div style={S.modalFooter}>
+                <button
+                  type="button"
+                  onClick={() => setIsAllocModalOpen(false)}
+                  style={S.cancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingAlloc}
+                  style={{
+                    ...S.primaryBtn,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {isSavingAlloc ? <FaSpinner className="fa-spin" /> : <FaCheck />}
+                  <span>Save Event Allocations</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: CREATE COORDINATOR LOGIN WITH ALLOCATION           */}
+      {/* ======================================================== */}
+      {isCreateCoordLoginModalOpen && (
+        <div style={S.modalBackdrop} onClick={() => setIsCreateCoordLoginModalOpen(false)}>
+          <div style={{ ...S.modalCard, maxWidth: '680px', maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div style={S.modalHeader}>
+              <div style={S.modalHeaderLeft}>
+                <div style={{ ...S.modalIconBox, background: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', color: '#10b981' }}>
+                  <FaUserPlus size={18} />
+                </div>
+                <div>
+                  <h3 style={S.modalTitle}>
+                    Create Coordinator Login & Allocate Events
+                  </h3>
+                  <p style={S.modalSubtitle}>
+                    Set credentials and assign specific event(s) to this coordinator in one step
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setIsCreateCoordLoginModalOpen(false)} style={S.modalCloseBtn}>✕</button>
+            </div>
+
+            <form onSubmit={handleCreateCoordWithAlloc} style={S.modalForm}>
+              <div style={S.modalFormBody}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                  <div style={S.modalInputGroup}>
+                    <label style={S.label}>Username *</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. coord_tech01 or slidecraft_coord"
+                      value={newCoordUsername}
+                      onChange={(e) => setNewCoordUsername(e.target.value)}
+                      style={S.input}
+                      required
+                    />
+                  </div>
+
+                  <div style={S.modalInputGroup}>
+                    <label style={S.label}>Password *</label>
+                    <input
+                      type="password"
+                      placeholder="Enter secure password"
+                      value={newCoordPassword}
+                      onChange={(e) => setNewCoordPassword(e.target.value)}
+                      style={S.input}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div style={S.modalInputGroup}>
+                  <label style={S.label}>Role *</label>
+                  <select
+                    value={newCoordRole}
+                    onChange={(e) => setNewCoordRole(e.target.value)}
+                    style={S.select}
+                  >
+                    <option value="Lead Coordinator">Lead Coordinator</option>
+                    <option value="Event Coordinator">Event Coordinator</option>
+                    <option value="Coordinator">Coordinator</option>
+                  </select>
+                </div>
+
+                <div style={S.modalInputGroup}>
+                  <label style={S.label}>Allocate Event(s) for this Coordinator *</label>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                    gap: '8px',
+                    maxHeight: '260px',
+                    overflowY: 'auto',
+                    paddingRight: '4px'
+                  }}>
+                    {eventsList.map(evt => {
+                      const isSelected = newCoordAllocEvents.includes(evt.id);
+                      const isTech = evt.category === 'technical';
+
+                      return (
+                        <div
+                          key={evt.id}
+                          onClick={() => {
+                            setNewCoordAllocEvents(prev => {
+                              if (prev.includes(evt.id)) {
+                                return prev.filter(id => id !== evt.id);
+                              } else {
+                                return [...prev, evt.id];
+                              }
+                            });
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            padding: '0.65rem 0.85rem',
+                            borderRadius: '10px',
+                            border: isSelected ? '2px solid #10b981' : (isDark ? '1px solid #374151' : '1px solid #e2e8f0'),
+                            background: isSelected
+                              ? (isDark ? 'rgba(16, 185, 129, 0.12)' : '#ecfdf5')
+                              : (isDark ? '#1f2937' : '#ffffff'),
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease'
+                          }}
+                        >
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '5px',
+                            border: isSelected ? '2px solid #10b981' : (isDark ? '2px solid #4b5563' : '2px solid #cbd5e1'),
+                            background: isSelected ? '#10b981' : 'transparent',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.7rem',
+                            flexShrink: 0
+                          }}>
+                            {isSelected && <FaCheck />}
+                          </div>
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: '700', color: isDark ? '#f9fafb' : '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {evt.name}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: isTech ? '#38bdf8' : '#f472b6', fontWeight: '700' }}>
+                              {evt.id} • {isTech ? 'Technical' : 'Non-Tech'}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div style={S.modalFooter}>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateCoordLoginModalOpen(false)}
+                  style={S.cancelBtn}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingCoordLogin}
+                  style={{
+                    ...S.primaryBtn,
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  {isCreatingCoordLogin ? <FaSpinner className="fa-spin" /> : <FaPlus />}
+                  <span>Create Coordinator Account</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

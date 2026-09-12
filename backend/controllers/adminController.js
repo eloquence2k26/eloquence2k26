@@ -381,12 +381,36 @@ exports.login = async (req, res) => {
       .single();
 
     if (!error && dbUser) {
+      let assignedEvents = dbUser.assigned_events || dbUser.assignedEvents || (dbUser.event_id || dbUser.eventId ? [dbUser.event_id || dbUser.eventId] : []);
+      if (typeof assignedEvents === 'string') {
+        try { assignedEvents = JSON.parse(assignedEvents); } catch (_) { assignedEvents = [assignedEvents]; }
+      }
+      if (!Array.isArray(assignedEvents) || assignedEvents.length === 0) {
+        const coordinators = getCoordinatorsData();
+        const uName = String(dbUser.username || '').toLowerCase();
+        const matched = coordinators.find(c => 
+          c.name?.toLowerCase().includes(uName) || uName.includes(c.name?.toLowerCase().split(' ')[0])
+        );
+        if (matched && Array.isArray(matched.assignedEvents)) {
+          assignedEvents = matched.assignedEvents;
+        }
+      }
+
       const token = jwt.sign(
-        { id: dbUser.id, username: dbUser.username, role: dbUser.role },
+        { id: dbUser.id, username: dbUser.username, role: dbUser.role, assignedEvents },
         process.env.JWT_SECRET,
         { expiresIn: '1d' }
       );
-      return res.json({ success: true, token, user: { username: dbUser.username, role: dbUser.role } });
+      return res.json({ 
+        success: true, 
+        token, 
+        user: { 
+          id: dbUser.id, 
+          username: dbUser.username, 
+          role: dbUser.role,
+          assignedEvents: Array.isArray(assignedEvents) ? assignedEvents : []
+        } 
+      });
     }
   } catch (e) {
     console.warn('Supabase auth fallback:', e.message);
@@ -396,8 +420,33 @@ exports.login = async (req, res) => {
   const user = users.find(u => u.username === username && u.password === password);
 
   if (user) {
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    return res.json({ success: true, token, user: { username: user.username, role: user.role } });
+    let assignedEvents = user.assignedEvents || (user.eventId ? [user.eventId] : []);
+    if (!Array.isArray(assignedEvents) || assignedEvents.length === 0) {
+      const coordinators = getCoordinatorsData();
+      const uName = String(user.username || '').toLowerCase();
+      const matched = coordinators.find(c => 
+        c.name?.toLowerCase().includes(uName) || uName.includes(c.name?.toLowerCase().split(' ')[0])
+      );
+      if (matched && Array.isArray(matched.assignedEvents)) {
+        assignedEvents = matched.assignedEvents;
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, assignedEvents }, 
+      process.env.JWT_SECRET, 
+      { expiresIn: '1d' }
+    );
+    return res.json({ 
+      success: true, 
+      token, 
+      user: { 
+        id: user.id, 
+        username: user.username, 
+        role: user.role,
+        assignedEvents: Array.isArray(assignedEvents) ? assignedEvents : []
+      } 
+    });
   }
 
   return res.status(401).json({ success: false, message: 'Invalid credentials' });
@@ -695,6 +744,98 @@ exports.deleteUser = async (req, res) => {
   }
 
   res.json({ success: true, message: 'User deleted successfully' });
+};
+
+// ==================== EVENT ALLOCATION MANAGEMENT ====================
+exports.getEventAllocations = async (req, res) => {
+  try {
+    const users = getUsersData().map(u => ({
+      id: u.id,
+      username: u.username,
+      role: u.role,
+      assignedEvents: Array.isArray(u.assignedEvents) ? u.assignedEvents : (u.eventId ? [u.eventId] : [])
+    }));
+
+    const events = getEventsData().map(e => ({
+      id: e.id,
+      name: e.name,
+      category: e.category,
+      isTeam: e.isTeam
+    }));
+
+    const coordinators = getCoordinatorsData();
+
+    res.json({
+      success: true,
+      data: {
+        users,
+        events,
+        coordinators
+      }
+    });
+  } catch (err) {
+    console.error('Error in getEventAllocations:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch event allocations' });
+  }
+};
+
+exports.updateEventAllocation = async (req, res) => {
+  try {
+    const { userId, username, assignedEvents } = req.body;
+    if (!userId && !username) {
+      return res.status(400).json({ success: false, message: 'User identifier required' });
+    }
+
+    const eventsArray = Array.isArray(assignedEvents) ? assignedEvents : assignedEvents ? [assignedEvents] : [];
+
+    const users = getUsersData();
+    const userIndex = users.findIndex(u => (userId && u.id === parseInt(userId, 10)) || (username && u.username === username));
+
+    if (userIndex !== -1) {
+      users[userIndex].assignedEvents = eventsArray;
+      users[userIndex].eventId = eventsArray[0] || null;
+      saveUsersData(users);
+    }
+
+    // Also update Supabase users table if available
+    try {
+      if (userIndex !== -1) {
+        await supabase.from('users').update({
+          assigned_events: JSON.stringify(eventsArray),
+          event_id: eventsArray[0] || null
+        }).eq('id', users[userIndex].id);
+      }
+    } catch (e) {
+      console.warn('Supabase updateEventAllocation fallback:', e.message);
+    }
+
+    // Also sync with coordinators.json if coordinator username/name matches
+    const coordinators = getCoordinatorsData();
+    const targetName = (userIndex !== -1 ? users[userIndex].username : username).toLowerCase();
+    let updatedCoord = false;
+    coordinators.forEach(c => {
+      if (c.name?.toLowerCase().includes(targetName) || targetName.includes(c.name?.toLowerCase().split(' ')[0])) {
+        c.assignedEvents = eventsArray;
+        updatedCoord = true;
+      }
+    });
+    if (updatedCoord) {
+      saveCoordinatorsData(coordinators);
+    }
+
+    res.json({
+      success: true,
+      message: 'Event allocation updated successfully!',
+      data: {
+        userId: userIndex !== -1 ? users[userIndex].id : userId,
+        username: userIndex !== -1 ? users[userIndex].username : username,
+        assignedEvents: eventsArray
+      }
+    });
+  } catch (err) {
+    console.error('Error in updateEventAllocation:', err);
+    res.status(500).json({ success: false, message: 'Failed to update event allocation' });
+  }
 };
 
 // ==================== ROLE MANAGEMENT ====================

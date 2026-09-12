@@ -472,5 +472,25 @@ export async function updateEventCoordinatorDetails(eventId, detailsPayload) {
   return res.json();
 }
 
+export async function fetchEventAllocations(token) {
+  const res = await fetch(getApiUrl('/api/admin/event-allocations'), {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  return res.json();
+}
+
+export async function updateEventAllocation(allocationData, token) {
+  const res = await fetch(getApiUrl('/api/admin/event-allocations'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(allocationData)
+  });
+  return res.json();
+}
+
+
 
 
