@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import studentCoordinators from '../data/studentCoordinators.json';
 import ShaderCard from '../components/ShaderCard.jsx';
+import ScrollableMarquee from '../components/ScrollableMarquee.jsx';
 import { fetchPublicHomepageCoordinators } from '../services/api.js';
 
 function renderCoordinatorIcon(iconName, tier) {
@@ -241,10 +242,10 @@ export default function StudentCoordinatorsSection() {
   );
   const displayList = activeTeams.length > 0 ? activeTeams : studentCoordinators;
 
-  // Build 2 perfectly matched halves so 50% translation loop is always 100% seamless without jumps
-  const repeatPerHalf = Math.max(1, Math.ceil(6 / (displayList.length || 1)));
-  const halfList = Array(repeatPerHalf).fill(displayList).flat();
-  const loopItems = [...halfList, ...halfList];
+  // Build 3 sets of items for seamless infinite bidirectional scrolling and wrapping
+  const repeatPerSet = Math.max(1, Math.ceil(4 / (displayList.length || 1)));
+  const baseList = Array(repeatPerSet).fill(displayList).flat();
+  const loopItems = [...baseList, ...baseList, ...baseList];
 
   return (
     <section
@@ -266,15 +267,17 @@ export default function StudentCoordinatorsSection() {
       <div className="student-coordinators-marquee">
         <div className="student-coordinators-marquee-fade marquee-fade-left" />
         <div className="student-coordinators-marquee-fade marquee-fade-right" />
-        <div className="student-coordinators-track">
-          {loopItems.map((item, i) => (
-            <CoordinatorSlideCard
-              key={`${item.id}-${i}`}
-              item={item}
-              index={i}
-            />
-          ))}
-        </div>
+        <ScrollableMarquee speed={36} direction="left" baseCount={baseList.length}>
+          <div className="student-coordinators-track">
+            {loopItems.map((item, i) => (
+              <CoordinatorSlideCard
+                key={`${item.id}-${i}`}
+                item={item}
+                index={i}
+              />
+            ))}
+          </div>
+        </ScrollableMarquee>
       </div>
     </section>
   );

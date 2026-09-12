@@ -3478,6 +3478,29 @@ img {
   }
 }
 
+@media (max-width: 768px) {
+  .footer-brand {
+    align-items: center;
+    text-align: center;
+  }
+
+  .footer-logo-container {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .footer-logo-img {
+    margin: 0 auto;
+    display: block;
+  }
+
+  .footer-desc {
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+  }
+}
+
 @media (max-width: 600px) {
   .footer-inner {
     grid-template-columns: 1fr;
@@ -3536,6 +3559,61 @@ img {
   color: var(--bright-green);
   margin-bottom: 0.6rem;
   text-shadow: 0 0 12px rgba(57, 255, 136, 0.4);
+}
+
+/* Interactive Scrollable Marquee (Drag-to-scroll, touch swipe, trackpad & wheel support with hidden scrollbar) */
+.marquee-scroll-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  width: 100%;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  position: relative;
+  z-index: 2;
+  padding: 0.5rem 0;
+}
+
+.marquee-scroll-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.marquee-scroll-container.is-dragging {
+  cursor: grabbing !important;
+  scroll-behavior: auto !important;
+}
+
+.marquee-scroll-container * {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+/* Ensure interactive elements inside remain clickable with appropriate cursor */
+.marquee-scroll-container a,
+.marquee-scroll-container button,
+.marquee-scroll-container [role="button"] {
+  cursor: pointer;
+}
+
+.marquee-scroll-container.is-dragging a,
+.marquee-scroll-container.is-dragging button,
+.marquee-scroll-container.is-dragging [role="button"] {
+  cursor: grabbing !important;
+}
+
+/* Disable old CSS keyframe transforms when inside marquee-scroll-container so scrollLeft takes full control */
+.marquee-scroll-container .patrons-track,
+.marquee-scroll-container .student-coordinators-track,
+.marquee-scroll-container .sponsor-track,
+.marquee-scroll-container .sponsor-track-reverse {
+  animation: none !important;
+  transform: none !important;
 }
 
 /* Patrons Marquee Slide Show */

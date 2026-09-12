@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import patrons from '../data/patrons.js';
 import ShaderCard from '../components/ShaderCard.jsx';
+import ScrollableMarquee from '../components/ScrollableMarquee.jsx';
 
 function renderPatronIcon(iconName, isGold) {
   const strokeColor = isGold ? '#f5e4b8' : '#39ff88';
@@ -143,15 +144,17 @@ export default function PatronsSection() {
       <div className="patrons-marquee">
         <div className="patrons-marquee-fade patrons-marquee-fade-left" />
         <div className="patrons-marquee-fade patrons-marquee-fade-right" />
-        <div className="patrons-track">
-          {loopPatrons.map((patron, i) => (
-            <PatronSlideCard
-              key={`${patron.id}-${i}`}
-              patron={patron}
-              index={i}
-            />
-          ))}
-        </div>
+        <ScrollableMarquee speed={36} direction="left" baseCount={patrons.length}>
+          <div className="patrons-track">
+            {loopPatrons.map((patron, i) => (
+              <PatronSlideCard
+                key={`${patron.id}-${i}`}
+                patron={patron}
+                index={i}
+              />
+            ))}
+          </div>
+        </ScrollableMarquee>
       </div>
     </section>
   );
