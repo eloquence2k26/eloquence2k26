@@ -61,7 +61,9 @@ import {
   FaLock,
   FaUnlock,
   FaExclamationTriangle,
-  FaSpinner
+  FaSpinner,
+  FaBuilding,
+  FaCamera
 } from 'react-icons/fa';
 import { getEventBanner, defaultEventImages } from '../data/eventImages.js';
 import { getApiUrl, getWsUrl } from '../config/api';
@@ -162,6 +164,12 @@ export default function AdminDashboard({ token, user, onLogout }) {
   const [eventImage, setEventImage] = useState('');
   const [eventImagePreview, setEventImagePreview] = useState('');
   const [isUploadingEventImage, setIsUploadingEventImage] = useState(false);
+
+  // Venue Image State
+  const [eventVenueImage, setEventVenueImage] = useState('');
+  const [eventVenueImagePreview, setEventVenueImagePreview] = useState('');
+  const [isUploadingVenueImage, setIsUploadingVenueImage] = useState(false);
+  const venueFileInputRef = useRef(null);
 
   // Event Rules State
   const [eventRules, setEventRules] = useState([]);
@@ -1352,11 +1360,15 @@ export default function AdminDashboard({ token, user, onLogout }) {
     setEventDesc('');
     setEventImage('');
     setEventImagePreview('');
+    setEventVenueImage('');
+    setEventVenueImagePreview('');
+    setIsUploadingVenueImage(false);
     setEventRules([]);
     setBulkRulesText('');
     setRulesInputMode('list');
     setIsEventEditModalOpen(false);
     if (eventFileInputRef.current) eventFileInputRef.current.value = '';
+    if (venueFileInputRef.current) venueFileInputRef.current.value = '';
   };
 
   const handleOpenCreateEventModal = () => {
@@ -1364,6 +1376,8 @@ export default function AdminDashboard({ token, user, onLogout }) {
     setEventFee('₹50 per head');
     setEventTiming('10:00 AM – 01:00 PM');
     setEventVenue('CSE Seminar Hall');
+    setEventVenueImage('');
+    setEventVenueImagePreview('');
     setEventTeamSize('Individual');
     setEventRules(['']);
     setBulkRulesText('');
@@ -1378,6 +1392,8 @@ export default function AdminDashboard({ token, user, onLogout }) {
     setEventSubtitle(eventItem.subtitle || '');
     setEventCategory(eventItem.category || 'technical');
     setEventVenue(eventItem.venue || '');
+    setEventVenueImage(eventItem.venueImage || eventItem.venue_image || '');
+    setEventVenueImagePreview(eventItem.venueImage || eventItem.venue_image || '');
     setEventTiming(eventItem.timing || '');
     setEventFee(eventItem.fee || '');
     setEventTeamSize(eventItem.teamSize || '');
@@ -1448,6 +1464,57 @@ export default function AdminDashboard({ token, user, onLogout }) {
     reader.readAsDataURL(file);
   };
 
+  const handleVenueImageFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      return toast.error('Please select a valid image file (PNG, JPG, WEBP, SVG)');
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      return toast.error('Image size exceeds 5MB limit');
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result;
+      setEventVenueImagePreview(base64);
+      setEventVenueImage(base64);
+
+      setIsUploadingVenueImage(true);
+      const loadingToast = toast.loading('Attaching venue photo...');
+
+      fetch(getApiUrl('/api/admin/upload'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          imageBase64: base64,
+          fileName: file.name,
+          type: 'venue'
+        })
+      })
+        .then(res => res.json())
+        .then(result => {
+          if (result.success) {
+            setEventVenueImage(result.url);
+            setEventVenueImagePreview(result.url);
+            toast.success('Venue photo attached! Click Save Event to persist.', { id: loadingToast });
+          } else {
+            toast.error(result.message || 'Upload failed', { id: loadingToast });
+          }
+        })
+        .catch(() => {
+          toast.error('Network error uploading venue photo', { id: loadingToast });
+        })
+        .finally(() => setIsUploadingVenueImage(false));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmitEventEdit = (e) => {
     e.preventDefault();
     if (!eventName.trim() || !eventVenue.trim() || !eventTiming.trim() || !eventFee.trim()) {
@@ -1469,6 +1536,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
       subtitle: eventSubtitle.trim(),
       category: eventCategory,
       venue: eventVenue.trim(),
+      venueImage: eventVenueImage.trim(),
       timing: eventTiming.trim(),
       fee: eventFee.trim(),
       teamSize: eventTeamSize.trim(),
@@ -2307,6 +2375,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
           {/* Events Tab */}
           <button 
             type="button"
+            id="admin-nav-events-btn"
             style={activeTab === 'events' ? { ...S.navItem, ...S.navItemActive } : S.navItem} 
             onClick={(e) => { e.preventDefault(); setActiveTab('events'); setMobileSidebarOpen(false); }}
           >
@@ -2819,6 +2888,103 @@ export default function AdminDashboard({ token, user, onLogout }) {
                 )}
               </div>
 
+              {/* Venue Photos Management Section */}
+              <div style={{ ...S.card, marginBottom: '1.25rem', padding: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '0.85rem' }}>
+                  <div>
+                    <h3 style={{ ...S.cardTitle, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <FaBuilding style={{ color: '#3b82f6' }} /> Venue Photos Management
+                    </h3>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                      Upload individual photos for each symposium venue. Each venue on the event rules page will exclusively display its own photo.
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                  gap: '12px'
+                }}>
+                  {Array.from(new Set(eventsList.map(e => e.venue).filter(Boolean))).map((venueName) => {
+                    const venueEvents = eventsList.filter(e => e.venue === venueName);
+                    const photo = venueEvents.find(e => e.venueImage)?.venueImage;
+                    const primaryEvent = venueEvents[0];
+
+                    return (
+                      <div
+                        key={venueName}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '0.75rem',
+                          borderRadius: '8px',
+                          background: isDark ? '#1f2937' : '#f8fafc',
+                          border: isDark ? '1px solid #374151' : '1px solid #e2e8f0'
+                        }}
+                      >
+                        <div style={{
+                          width: '58px',
+                          height: '44px',
+                          borderRadius: '6px',
+                          overflow: 'hidden',
+                          background: isDark ? '#111827' : '#e2e8f0',
+                          border: photo ? '1px solid #3b82f6' : '1px dashed #94a3b8',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          {photo ? (
+                            <img src={photo} alt={venueName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <FaCamera size={14} color="#94a3b8" />
+                          )}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{
+                            fontWeight: '600',
+                            fontSize: '0.85rem',
+                            color: isDark ? '#f3f4f6' : '#1e293b',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis'
+                          }}>
+                            {venueName}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                            {photo ? '✓ Photo uploaded' : '⚠ No photo set'} &bull; {venueEvents.length} event{venueEvents.length > 1 ? 's' : ''}
+                          </div>
+                        </div>
+
+                        {!isLeadCoordinator && primaryEvent && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditEventModal(primaryEvent)}
+                            style={{
+                              padding: '0.35rem 0.65rem',
+                              fontSize: '0.75rem',
+                              borderRadius: '6px',
+                              background: photo ? (isDark ? '#374151' : '#e2e8f0') : (isDark ? '#1e3a8a' : '#eff6ff'),
+                              color: photo ? (isDark ? '#e5e7eb' : '#334155') : (isDark ? '#93c5fd' : '#1d4ed8'),
+                              border: 'none',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              flexShrink: 0
+                            }}
+                            title={`Upload or change photo for ${venueName}`}
+                          >
+                            {photo ? 'Edit' : '+ Add'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div style={S.card}>
                 <div style={S.cardHeaderFlex}>
                   <h3 style={S.cardTitle}>Symposium Events ({filteredEventsList.length})</h3>
@@ -2904,10 +3070,28 @@ export default function AdminDashboard({ token, user, onLogout }) {
                             </span>
                           </td>
                           <td style={S.td}>
-                            <span style={S.venueText}>
-                              <FaMapMarkerAlt style={{ color: '#64748b', marginRight: '6px', fontSize: '0.85rem' }} />
-                              {evt.venue}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {evt.venueImage ? (
+                                <img
+                                  src={evt.venueImage}
+                                  alt={evt.venue}
+                                  style={{
+                                    width: '32px',
+                                    height: '24px',
+                                    borderRadius: '4px',
+                                    objectFit: 'cover',
+                                    border: isDark ? '1px solid #374151' : '1px solid #cbd5e1',
+                                    cursor: 'pointer'
+                                  }}
+                                  onClick={() => handleOpenEditEventModal(evt)}
+                                  title="Venue photo attached - click to edit"
+                                />
+                              ) : null}
+                              <span style={S.venueText}>
+                                <FaBuilding style={{ color: '#64748b', marginRight: '6px', fontSize: '0.85rem' }} />
+                                {evt.venue}
+                              </span>
+                            </div>
                           </td>
                           <td style={S.td}>
                             <span style={S.timeText}>
@@ -5629,6 +5813,124 @@ export default function AdminDashboard({ token, user, onLogout }) {
                       readOnly={isLeadCoordinator}
                       required 
                     />
+                  </div>
+                </div>
+
+                {/* Dedicated Venue Photo Section */}
+                <div style={{
+                  ...S.modalInputGroup,
+                  background: isDark ? 'rgba(31, 41, 55, 0.4)' : '#f8fafc',
+                  padding: '1rem',
+                  borderRadius: '10px',
+                  border: isDark ? '1px solid #374151' : '1px solid #e2e8f0',
+                  marginTop: '0.25rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                    <label style={{ ...S.label, margin: 0, display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      <FaImage color={isDark ? '#38bdf8' : '#0284c7'} /> Venue Photo / Image
+                    </label>
+                    <span style={{ fontSize: '0.75rem', color: isDark ? '#9ca3af' : '#64748b' }}>
+                      Displayed on participant Event Rules popup
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                    <div style={{
+                      width: '120px',
+                      height: '80px',
+                      borderRadius: '8px',
+                      background: isDark ? '#111827' : '#ffffff',
+                      border: isDark ? '2px dashed #4b5563' : '2px dashed #cbd5e1',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      flexShrink: 0
+                    }}>
+                      {eventVenueImagePreview ? (
+                        <img 
+                          src={eventVenueImagePreview} 
+                          alt="Venue Preview" 
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        />
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '0.25rem' }}>
+                          <FaBuilding color="#94a3b8" size={20} />
+                          <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '3px' }}>No photo set</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {!isLeadCoordinator && (
+                      <div style={{ flex: 1, minWidth: '220px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <input 
+                          type="file" 
+                          ref={venueFileInputRef} 
+                          onChange={handleVenueImageFileSelect} 
+                          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                          style={{ display: 'none' }}
+                        />
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button 
+                            type="button" 
+                            onClick={() => venueFileInputRef.current?.click()}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '0.55rem 0.95rem',
+                              background: isDark ? '#064e3b' : '#ecfdf5',
+                              border: isDark ? '1px solid #059669' : '1px solid #a7f3d0',
+                              color: isDark ? '#6ee7b7' : '#059669',
+                              borderRadius: '8px',
+                              fontSize: '0.85rem',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                            disabled={isUploadingVenueImage}
+                          >
+                            <FaUpload size={12} /> {isUploadingVenueImage ? 'Uploading...' : 'Upload Venue Photo'}
+                          </button>
+                          {eventVenueImagePreview && (
+                            <button 
+                              type="button" 
+                              onClick={() => { setEventVenueImage(''); setEventVenueImagePreview(''); }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '0.55rem 0.85rem',
+                                background: isDark ? '#1f2937' : '#f8fafc',
+                                border: isDark ? '1px solid #374151' : '1px solid #e2e8f0',
+                                color: isDark ? '#ef4444' : '#dc2626',
+                                borderRadius: '8px',
+                                fontSize: '0.85rem',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <FaTrash size={11} /> Remove Photo
+                            </button>
+                          )}
+                        </div>
+                        <input 
+                          type="text" 
+                          placeholder="Or paste image URL (https://...)" 
+                          value={eventVenueImage.startsWith('data:') ? '' : eventVenueImage}
+                          onChange={(e) => {
+                            setEventVenueImage(e.target.value);
+                            setEventVenueImagePreview(e.target.value);
+                          }}
+                          style={{
+                            ...S.input,
+                            padding: '0.45rem 0.65rem',
+                            fontSize: '0.82rem'
+                          }}
+                        />
+                        <span style={S.inputHelper}>
+                          Upload a photo of the room, lab, or arena for this venue. Each venue on the event rules page will display only its own photo.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -156,6 +156,7 @@ const dbToEvent = (e) => ({
   isTeam: e.is_team !== false && e.isTeam !== false,
   tag: e.tag,
   venue: e.venue,
+  venueImage: e.venue_image || e.venueImage || '',
   timing: e.timing,
   description: e.description,
   image: e.image || '',
@@ -825,17 +826,24 @@ exports.deleteRole = async (req, res) => {
 
 // ==================== EVENT MANAGEMENT ====================
 exports.getEvents = async (req, res) => {
+  const localEvents = getEventsData();
   try {
     const { data: dbEvents, error } = await supabase.from('events').select('*').order('id', { ascending: true });
     if (!error && Array.isArray(dbEvents) && dbEvents.length > 0) {
-      return res.json({ success: true, data: dbEvents.map(dbToEvent) });
+      const merged = dbEvents.map(dbToEvent).map(e => {
+        const local = localEvents.find(l => l.id === e.id);
+        return {
+          ...e,
+          venueImage: e.venueImage || (local ? (local.venueImage || local.venue_image) : '') || ''
+        };
+      });
+      return res.json({ success: true, data: merged });
     }
   } catch (e) {
     console.warn('Supabase getEvents fallback:', e.message);
   }
 
-  const events = getEventsData();
-  res.json({ success: true, data: events });
+  res.json({ success: true, data: localEvents });
 };
 
 const saveBase64ImageIfPresent = (imageStr, prefix = 'event') => {
@@ -885,6 +893,7 @@ exports.createEvent = async (req, res) => {
     subtitle,
     category,
     venue,
+    venueImage,
     timing,
     fee,
     feePerHead,
@@ -934,6 +943,7 @@ exports.createEvent = async (req, res) => {
     isTeam: teamSize ? (teamSize.toLowerCase().includes('team') || teamSize.toLowerCase().includes('max') || teamSize.toLowerCase().includes('squad')) : false,
     tag: tag ? tag.trim() : (cat === 'technical' ? 'Technical Presentation' : 'Non-Technical Event'),
     venue: venue ? venue.trim() : 'CSE Department',
+    venueImage: venueImage ? venueImage.trim() : '',
     timing: timing ? timing.trim() : '10:00 AM – 01:00 PM',
     description: description ? description.trim() : '',
     image: image ? image.trim() : '',
@@ -960,6 +970,7 @@ exports.createEvent = async (req, res) => {
       is_team: newEvent.isTeam,
       tag: newEvent.tag,
       venue: newEvent.venue,
+      venue_image: newEvent.venueImage,
       timing: newEvent.timing,
       description: newEvent.description,
       image: newEvent.image,
@@ -969,14 +980,17 @@ exports.createEvent = async (req, res) => {
       highlights: newEvent.highlights,
       updated_at: new Date().toISOString()
     };
-    const { error: dbErr } = await supabase.from('events').upsert([dbPayload], { onConflict: 'id' });
+    let { error: dbErr } = await supabase.from('events').upsert([dbPayload], { onConflict: 'id' });
+    if (dbErr && dbErr.code === 'PGRST204') {
+      delete dbPayload.venue_image;
+      const retryRes = await supabase.from('events').upsert([dbPayload], { onConflict: 'id' });
+      dbErr = retryRes.error;
+    }
     if (dbErr) {
-      console.error('Supabase createEvent error:', dbErr.message);
-      return res.status(500).json({ success: false, message: 'Supabase database error: ' + dbErr.message });
+      console.warn('Supabase createEvent warning:', dbErr.message);
     }
   } catch (e) {
-    console.error('Supabase createEvent exception:', e.message);
-    return res.status(500).json({ success: false, message: 'Database exception: ' + e.message });
+    console.warn('Supabase createEvent exception:', e.message);
   }
 
   const existingIdx = events.findIndex(e => e.id === newEvent.id);
@@ -1006,6 +1020,7 @@ exports.updateEvent = async (req, res) => {
     subtitle,
     category,
     venue,
+    venueImage,
     timing,
     fee,
     feePerHead,
@@ -1036,6 +1051,7 @@ exports.updateEvent = async (req, res) => {
   if (subtitle !== undefined) updateFields.subtitle = subtitle.trim();
   if (category !== undefined) updateFields.category = category.trim().toLowerCase();
   if (venue !== undefined) updateFields.venue = venue.trim();
+  if (venueImage !== undefined) updateFields.venue_image = venueImage ? venueImage.trim() : '';
   if (timing !== undefined) updateFields.timing = timing.trim();
   if (fee !== undefined) updateFields.fee = fee.trim();
   if (parsedFeePerHead !== undefined) updateFields.fee_per_head = parsedFeePerHead;
@@ -1060,14 +1076,17 @@ exports.updateEvent = async (req, res) => {
       ...(existingDbEvent || {}),
       ...updateFields
     };
-    const { error: dbErr } = await supabase.from('events').upsert(dbPayload);
+    let { error: dbErr } = await supabase.from('events').upsert(dbPayload);
+    if (dbErr && dbErr.code === 'PGRST204') {
+      delete dbPayload.venue_image;
+      const retryRes = await supabase.from('events').upsert(dbPayload);
+      dbErr = retryRes.error;
+    }
     if (dbErr) {
-      console.error('Supabase updateEvent error:', dbErr.message);
-      return res.status(500).json({ success: false, message: 'Supabase database error: ' + dbErr.message });
+      console.warn('Supabase updateEvent warning:', dbErr.message);
     }
   } catch (e) {
-    console.error('Supabase updateEvent exception:', e.message);
-    return res.status(500).json({ success: false, message: 'Database exception: ' + e.message });
+    console.warn('Supabase updateEvent exception:', e.message);
   }
 
   if (eventIndex !== -1) {
@@ -1076,6 +1095,7 @@ exports.updateEvent = async (req, res) => {
     if (subtitle !== undefined) events[eventIndex].subtitle = subtitle.trim();
     if (category !== undefined) events[eventIndex].category = category.trim().toLowerCase();
     if (venue !== undefined) events[eventIndex].venue = venue.trim();
+    if (venueImage !== undefined) events[eventIndex].venueImage = venueImage ? venueImage.trim() : '';
     if (timing !== undefined) events[eventIndex].timing = timing.trim();
     if (fee !== undefined) events[eventIndex].fee = fee.trim();
     if (parsedFeePerHead !== undefined) events[eventIndex].feePerHead = parsedFeePerHead;
@@ -1086,7 +1106,7 @@ exports.updateEvent = async (req, res) => {
     }
     if (tag !== undefined) events[eventIndex].tag = tag.trim();
     if (description !== undefined) events[eventIndex].description = description.trim();
-    if (cleanImage !== undefined) events[eventIndex].image = cleanImage;
+    if (image !== undefined) events[eventIndex].image = image ? image.trim() : '';
     if (rules !== undefined && Array.isArray(rules)) events[eventIndex].rules = rules;
     if (rounds !== undefined && Array.isArray(rounds)) events[eventIndex].rounds = rounds;
     if (guidelines !== undefined && Array.isArray(guidelines)) events[eventIndex].guidelines = guidelines;

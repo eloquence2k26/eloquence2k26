@@ -45,6 +45,7 @@ ALTER TABLE public.events ADD COLUMN IF NOT EXISTS fee_type TEXT DEFAULT 'per_he
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS min_members INT DEFAULT 1;
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS max_members INT DEFAULT 1;
 ALTER TABLE public.events ADD COLUMN IF NOT EXISTS team_size TEXT;
+ALTER TABLE public.events ADD COLUMN IF NOT EXISTS venue_image TEXT;
 
 -- ------------------------------------------------------------------------------
 -- 2. REGISTRATIONS TABLE

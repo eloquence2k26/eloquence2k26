@@ -229,6 +229,7 @@ const dbToEvent = (e) => ({
   isTeam: e.is_team !== false && e.isTeam !== false,
   tag: e.tag,
   venue: e.venue,
+  venueImage: e.venue_image || e.venueImage || '',
   timing: e.timing,
   description: e.description,
   image: e.image || '',
@@ -718,26 +719,31 @@ exports.getHealth = (req, res) => {
 };
 
 exports.getPublicEvents = async (req, res) => {
+  let localEvents = [];
+  try {
+    const eventsFile = path.join(DATA_DIR, 'events.json');
+    if (fs.existsSync(eventsFile)) {
+      localEvents = JSON.parse(fs.readFileSync(eventsFile, 'utf-8'));
+    }
+  } catch (e) {}
+
   try {
     const { data: dbEvents, error } = await supabase.from('events').select('*').order('id', { ascending: true });
     if (!error && Array.isArray(dbEvents) && dbEvents.length > 0) {
-      return res.json({ success: true, data: dbEvents.map(dbToEvent) });
+      const merged = dbEvents.map(dbToEvent).map(e => {
+        const local = localEvents.find(l => l.id === e.id);
+        return {
+          ...e,
+          venueImage: e.venueImage || (local ? (local.venueImage || local.venue_image) : '') || ''
+        };
+      });
+      return res.json({ success: true, data: merged });
     }
   } catch (e) {
     console.warn('Supabase getPublicEvents fallback:', e.message);
   }
 
-  try {
-    const eventsFile = path.join(DATA_DIR, 'events.json');
-    if (fs.existsSync(eventsFile)) {
-      const data = fs.readFileSync(eventsFile, 'utf-8');
-      return res.json({ success: true, data: JSON.parse(data) });
-    }
-    res.json({ success: true, data: [] });
-  } catch (err) {
-    console.error('Error reading events:', err);
-    res.status(500).json({ success: false, message: 'Could not load events' });
-  }
+  res.json({ success: true, data: localEvents });
 };
 
 // Helper to enrich a database registration with parsed venue_snapshot metadata (Razorpay info)

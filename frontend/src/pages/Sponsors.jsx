@@ -30,14 +30,6 @@ function SponsorCard({ sponsor, tier }) {
     setFlipped((f) => !f);
   };
 
-  const handleMouseLeave = () => {
-    // When the mouse leaves the card, ensure it turns back to the front face
-    // so when it starts moving again, the front side is what moves!
-    if (flipped) {
-      setFlipped(false);
-    }
-  };
-
   const tag = sponsor.tag || sponsor.category || 'PARTNER';
   const hasContact = Boolean(sponsor.contactName || sponsor.contactPhone);
   const cleanPhone = sponsor.contactPhone ? String(sponsor.contactPhone).replace(/[^0-9+]/g, '') : '';
@@ -73,7 +65,6 @@ function SponsorCard({ sponsor, tier }) {
       ref={cardRef}
       className={`sponsor-card sponsor-card-${tier} ${flipped ? 'card-is-flipped' : ''}`}
       onClick={handleCardClick}
-      onMouseLeave={handleMouseLeave}
       role="button"
       tabIndex={0}
       aria-label={`${sponsor.name} — click or tap to view contact details`}
@@ -111,18 +102,24 @@ function SponsorCard({ sponsor, tier }) {
           </div>
           <div className="sponsor-front-bottom">
             <h4 className="sponsor-name">{sponsor.name}</h4>
+            {(sponsor.description || (sponsor.companyName && sponsor.companyName !== sponsor.name ? sponsor.companyName : null)) && (
+              <p
+                className="sponsor-front-desc"
+                title={sponsor.description || sponsor.companyName}
+              >
+                {sponsor.description || sponsor.companyName}
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Back Face: Detailed Overview + Contact Box + Action Buttons */}
+        {/* Back Face: Contact Details Box + Action Buttons (Description moved to front) */}
         <div className="sponsor-face sponsor-back">
           <div className="sponsor-back-header">
             <span className="sponsor-back-tier-tag">{tag}</span>
             <h4 className="sponsor-back-name">{sponsor.name}</h4>
-            {(sponsor.description || sponsor.companyName) && (
-              <p className="sponsor-desc">
-                {sponsor.description || sponsor.companyName}
-              </p>
+            {sponsor.companyName && sponsor.companyName !== sponsor.name && (
+              <span className="sponsor-back-company">{sponsor.companyName}</span>
             )}
           </div>
 

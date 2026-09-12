@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import toast from 'react-hot-toast';
 import {
   FaArrowLeft,
@@ -12,16 +13,106 @@ import {
   FaHeadset,
   FaSpinner,
   FaBolt,
-  FaLock
+  FaLock,
+  FaTimes,
+  FaExternalLinkAlt,
+  FaCopy,
+  FaBuilding,
+  FaCamera,
+  FaImage
 } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { getApiUrl, getWsUrl } from '../config/api';
+
+function VenueImageModal({ isOpen, onClose, event }) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const venueName = event?.venue || 'Designated Campus Venue';
+  const venuePhoto = event?.venueImage || event?.venue_image;
+
+  return createPortal(
+    <div
+      className="venue-modal-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="venue-modal-title"
+    >
+      <div
+        className="venue-modal-card venue-image-modal-card"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="venue-modal-close-btn"
+          onClick={onClose}
+          aria-label="Close venue photo"
+          title="Close (Esc)"
+        >
+          <FaTimes />
+        </button>
+
+        <div className="venue-modal-header">
+          <span className="venue-modal-badge">✦ VENUE PHOTO</span>
+          <h2 id="venue-modal-title" className="venue-modal-title">{venueName}</h2>
+          <p className="venue-modal-college-name">
+            {event?.name ? `Designated hall & arena for ${event.name}` : 'Symposium Venue'}
+          </p>
+        </div>
+
+        {venuePhoto ? (
+          <div className="venue-single-photo-wrap">
+            <img
+              src={venuePhoto}
+              alt={venueName}
+              className="venue-single-photo-img"
+            />
+            <div className="venue-single-photo-caption">
+              <span className="venue-photo-badge">VENUE VIEW</span>
+              <span className="venue-photo-name">{venueName}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="venue-no-photo-box">
+            <div className="venue-no-photo-icon-ring">
+              <FaCamera className="venue-no-photo-icon" />
+            </div>
+            <h4 className="venue-no-photo-title">Venue Photo Coming Soon</h4>
+            <p className="venue-no-photo-text">
+              The coordinators have not uploaded a photo for <strong>{venueName}</strong> yet. You can upload photos for this venue anytime in the Admin Panel.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
 
 export default function EventRulesPage({ eventId, from, categoryFilter, onNavigate }) {
   const [eventsList, setEventsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [liveCoordinators, setLiveCoordinators] = useState([]);
   const [isRegClosed, setIsRegClosed] = useState(false);
+  const [showVenueModal, setShowVenueModal] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -285,12 +376,12 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
           </button>
         </motion.div>
 
-        {/* Main Title & Category Tag Header */}
+        {/* Main Title & Category Tag Header (Centered) */}
         <motion.div
           initial={{ opacity: 0, y: -15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="rules-title-header-wrap"
+          className="rules-title-header-wrap rules-title-header-centered"
         >
           <span className="rules-category-tag">
             {event.category === 'technical' ? '⚡ TECHNICAL EVENT' : '🎮 NON-TECHNICAL EVENT'}
@@ -303,60 +394,95 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
 
         {/* 2-Column Split: Overview (Left) & Rules (Right) */}
         <div className="rules-split-grid">
-          {/* Left Side: Overview Card */}
+          {/* Left Side: Overview Stack (4 Small Boxes + 1 Long Diagonal Card + CTA) */}
           <motion.div
             initial={{ opacity: 0, x: -30 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="rules-card-glass rules-left-overview-card"
+            className="rules-left-overview-stack"
           >
-            <div className="rules-card-header">
-              <h2 className="rules-card-title">
-                <FaMapMarkerAlt className="rules-card-icon" /> Overview
-              </h2>
+            {/* 4 Small Detail Boxes Grid */}
+            <div className="rules-overview-quad-grid">
+              {/* Box 1: Venue (Entire card clickable to view picture) */}
+              <div
+                className="rules-overview-box rules-overview-box-venue rules-overview-box-clickable"
+                onClick={() => setShowVenueModal(true)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setShowVenueModal(true);
+                  }
+                }}
+                title="Click to view venue picture"
+              >
+                <div className="rules-box-top">
+                  <span className="rules-box-icon"><FaBuilding /></span>
+                  <span className="rules-box-label">VENUE</span>
+                  <span className="rules-box-corner-indicator" title="Click to view picture">↗</span>
+                </div>
+                <div className="rules-box-value">{event.venue || 'CSE Department Labs'}</div>
+                <span className="rules-box-subhint">Click to view photo</span>
+              </div>
+
+              {/* Box 2: Timing */}
+              <div className="rules-overview-box">
+                <div className="rules-box-top">
+                  <span className="rules-box-icon"><FaClock /></span>
+                  <span className="rules-box-label">TIMING</span>
+                </div>
+                <div className="rules-box-value">{event.timing || '10:40 AM – 12:40 PM'}</div>
+                <span className="rules-box-subhint">Reporting: 15 mins prior</span>
+              </div>
+
+              {/* Box 3: Registration Fee */}
+              <div className="rules-overview-box">
+                <div className="rules-box-top">
+                  <span className="rules-box-icon"><FaMoneyBillWave /></span>
+                  <span className="rules-box-label">REGISTRATION FEE</span>
+                </div>
+                <div className="rules-box-value fee-highlight">{event.fee}</div>
+                <span className="rules-box-subhint">
+                  {event.feeType === 'per_head' ? 'Per participant' : 'Per team'}
+                </span>
+              </div>
+
+              {/* Box 4: Members / Team Size */}
+              <div className="rules-overview-box">
+                <div className="rules-box-top">
+                  <span className="rules-box-icon"><FaUsers /></span>
+                  <span className="rules-box-label">MEMBERS</span>
+                </div>
+                <div className="rules-box-value">{event.teamSize}</div>
+                <span className="rules-box-subhint">
+                  {event.isTeam ? 'Team competition' : 'Solo entry'}
+                </span>
+              </div>
             </div>
 
-            <div className="rules-clean-meta-list">
-              <div className="rules-meta-row">
-                <span className="rules-meta-icon"><FaMapMarkerAlt /></span>
-                <div className="rules-meta-content">
-                  <strong className="rules-meta-key">Venue:</strong>
-                  <span className="rules-meta-val">{event.venue || 'CSE Department Labs'}</span>
+            {/* One Long Diagonal Card for Description */}
+            <div className="rules-desc-diagonal-card">
+              <div className="diagonal-card-header">
+                <div className="diagonal-card-badge">
+                  <span className="diagonal-badge-dot" />
+                  <span>OVERVIEW & BRIEF</span>
                 </div>
+                <span className="diagonal-cut-corner-decor" />
               </div>
-
-              <div className="rules-meta-row">
-                <span className="rules-meta-icon"><FaClock /></span>
-                <div className="rules-meta-content">
-                  <strong className="rules-meta-key">Timing:</strong>
-                  <span className="rules-meta-val">{event.timing || '10:40 AM – 12:40 PM'}</span>
-                </div>
-              </div>
-
-              <div className="rules-meta-row">
-                <span className="rules-meta-icon"><FaMoneyBillWave /></span>
-                <div className="rules-meta-content">
-                  <strong className="rules-meta-key">Registration Fee:</strong>
-                  <span className="rules-meta-val fee-highlight">{event.fee}</span>
-                </div>
-              </div>
-
-              <div className="rules-meta-row">
-                <span className="rules-meta-icon"><FaUsers /></span>
-                <div className="rules-meta-content">
-                  <strong className="rules-meta-key">Members:</strong>
-                  <span className="rules-meta-val">{event.teamSize}</span>
-                </div>
-              </div>
-
-              <div className="rules-meta-row desc-row">
-                <div className="rules-meta-content">
-                  <strong className="rules-meta-key">Description:</strong>
-                  <p className="rules-meta-desc-text">{event.subtitle || event.description}</p>
-                </div>
+              <div className="diagonal-card-content">
+                <p className="diagonal-desc-text">
+                  {event.description || event.subtitle}
+                </p>
+                {event.subtitle && event.description && event.subtitle !== event.description && (
+                  <div className="diagonal-subtitle-tag">
+                    <span>✦ {event.subtitle}</span>
+                  </div>
+                )}
               </div>
             </div>
 
+            {/* Registration CTA Actions */}
             {isEsports ? (
               <div className="overview-card-cta-wrap esports-cta-wrap">
                 <div className="esports-cta-heading">
@@ -519,6 +645,13 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
           Register Now <FaArrowRight style={{ marginLeft: '0.45rem', verticalAlign: '-1px' }} />
         </button>
       </div>
+
+      {/* Venue Photo Popup Modal */}
+      <VenueImageModal
+        isOpen={showVenueModal}
+        onClose={() => setShowVenueModal(false)}
+        event={event}
+      />
     </div>
   );
 }
