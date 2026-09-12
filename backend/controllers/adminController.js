@@ -749,12 +749,51 @@ exports.deleteUser = async (req, res) => {
 // ==================== EVENT ALLOCATION MANAGEMENT ====================
 exports.getEventAllocations = async (req, res) => {
   try {
-    const users = getUsersData().map(u => ({
-      id: u.id,
-      username: u.username,
-      role: u.role,
-      assignedEvents: Array.isArray(u.assignedEvents) ? u.assignedEvents : (u.eventId ? [u.eventId] : [])
-    }));
+    let allUsers = [];
+    try {
+      const { data: dbUsers, error } = await supabase.from('users').select('*').order('id', { ascending: true });
+      if (!error && Array.isArray(dbUsers) && dbUsers.length > 0) {
+        allUsers = [...dbUsers];
+      }
+    } catch (e) {
+      console.warn('Supabase getEventAllocations fallback:', e.message);
+    }
+
+    const localUsers = getUsersData();
+    if (allUsers.length === 0) {
+      allUsers = [...localUsers];
+    } else {
+      localUsers.forEach(lu => {
+        if (!allUsers.some(u => u.username === lu.username || u.id === lu.id)) {
+          allUsers.push(lu);
+        }
+      });
+    }
+
+    const coordinators = getCoordinatorsData();
+
+    const users = allUsers.map(u => {
+      let assignedEvents = u.assigned_events || u.assignedEvents || (u.event_id || u.eventId ? [u.event_id || u.eventId] : []);
+      if (typeof assignedEvents === 'string') {
+        try { assignedEvents = JSON.parse(assignedEvents); } catch (_) { assignedEvents = [assignedEvents]; }
+      }
+      if (!Array.isArray(assignedEvents) || assignedEvents.length === 0) {
+        const uName = String(u.username || '').toLowerCase();
+        const matched = coordinators.find(c => 
+          c.name?.toLowerCase().includes(uName) || uName.includes(c.name?.toLowerCase().split(' ')[0])
+        );
+        if (matched && Array.isArray(matched.assignedEvents)) {
+          assignedEvents = matched.assignedEvents;
+        }
+      }
+
+      return {
+        id: u.id,
+        username: u.username,
+        role: u.role,
+        assignedEvents: Array.isArray(assignedEvents) ? assignedEvents : []
+      };
+    });
 
     const events = getEventsData().map(e => ({
       id: e.id,
@@ -762,8 +801,6 @@ exports.getEventAllocations = async (req, res) => {
       category: e.category,
       isTeam: e.isTeam
     }));
-
-    const coordinators = getCoordinatorsData();
 
     res.json({
       success: true,
@@ -789,12 +826,24 @@ exports.updateEventAllocation = async (req, res) => {
     const eventsArray = Array.isArray(assignedEvents) ? assignedEvents : assignedEvents ? [assignedEvents] : [];
 
     const users = getUsersData();
-    const userIndex = users.findIndex(u => (userId && u.id === parseInt(userId, 10)) || (username && u.username === username));
+    let userIndex = users.findIndex(u => (userId && u.id === parseInt(userId, 10)) || (username && u.username === username));
 
     if (userIndex !== -1) {
       users[userIndex].assignedEvents = eventsArray;
       users[userIndex].eventId = eventsArray[0] || null;
       saveUsersData(users);
+    } else if (username) {
+      const newUser = {
+        id: userId ? parseInt(userId, 10) : Date.now(),
+        username,
+        password: 'coordinator123',
+        role: 'Event Coordinator',
+        assignedEvents: eventsArray,
+        eventId: eventsArray[0] || null
+      };
+      users.push(newUser);
+      saveUsersData(users);
+      userIndex = users.length - 1;
     }
 
     // Also update Supabase users table if available

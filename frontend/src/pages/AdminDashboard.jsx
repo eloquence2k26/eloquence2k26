@@ -863,11 +863,28 @@ export default function AdminDashboard({ token, user, onLogout }) {
   const fetchAllocations = () => {
     fetchEventAllocations(token)
       .then(result => {
-        if (result.success && result.data?.users) {
+        if (result.success && Array.isArray(result.data?.users) && result.data.users.length > 0) {
           setAllocUsersList(result.data.users);
+        } else if (users && users.length > 0) {
+          setAllocUsersList(users.map(u => ({
+            id: u.id,
+            username: u.username,
+            role: u.role,
+            assignedEvents: Array.isArray(u.assignedEvents) ? u.assignedEvents : (u.eventId ? [u.eventId] : [])
+          })));
         }
       })
-      .catch(err => console.warn('Error fetching event allocations:', err));
+      .catch(err => {
+        console.warn('Error fetching event allocations:', err);
+        if (users && users.length > 0) {
+          setAllocUsersList(users.map(u => ({
+            id: u.id,
+            username: u.username,
+            role: u.role,
+            assignedEvents: Array.isArray(u.assignedEvents) ? u.assignedEvents : (u.eventId ? [u.eventId] : [])
+          })));
+        }
+      });
   };
 
   const handleOpenAllocModal = (userItem) => {
@@ -911,6 +928,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
         setIsAllocModalOpen(false);
         fetchUsers();
         fetchCoordinators();
+        fetchAllocations();
       } else {
         toast.error(res.message || 'Failed to update allocation', { id: toastId });
       }
@@ -958,6 +976,16 @@ export default function AdminDashboard({ token, user, onLogout }) {
         username: newCoordUsername.trim(),
         assignedEvents: newCoordAllocEvents
       }, token);
+
+      const createdUserObj = {
+        id: userData.data?.id || Date.now(),
+        username: newCoordUsername.trim(),
+        role: newCoordRole,
+        assignedEvents: newCoordAllocEvents
+      };
+
+      setAllocUsersList(prev => [...prev.filter(u => u.username !== createdUserObj.username), createdUserObj]);
+      setUsers(prev => [...prev.filter(u => u.username !== createdUserObj.username), { id: createdUserObj.id, username: createdUserObj.username, role: createdUserObj.role }]);
 
       toast.success(`Coordinator account "${newCoordUsername}" created & allocated to ${newCoordAllocEvents.length} event(s)!`, { id: toastId, duration: 5000 });
       setIsCreateCoordLoginModalOpen(false);
@@ -2318,6 +2346,24 @@ export default function AdminDashboard({ token, user, onLogout }) {
       (team.desc && team.desc.toLowerCase().includes(q)) ||
       (Array.isArray(team.members) && team.members.some(m => (typeof m === 'string' ? m : m.name)?.toLowerCase().includes(q))) ||
       (Array.isArray(team.names) && team.names.some(n => n.toLowerCase().includes(q)));
+  });
+
+  const displayAllocUsers = (allocUsersList && allocUsersList.length > 0)
+    ? allocUsersList
+    : (users && users.length > 0 ? users.map(u => ({
+        id: u.id,
+        username: u.username,
+        role: u.role,
+        assignedEvents: Array.isArray(u.assignedEvents) ? u.assignedEvents : (u.eventId ? [u.eventId] : [])
+      })) : []);
+
+  const filteredAllocUsers = displayAllocUsers.filter(u => {
+    const q = allocUserSearch.toLowerCase().trim();
+    if (!q) return true;
+    const uName = (u.username || '').toLowerCase();
+    const uRole = (u.role || '').toLowerCase();
+    const assigned = (Array.isArray(u.assignedEvents) ? u.assignedEvents.join(' ') : (u.eventId || '')).toLowerCase();
+    return uName.includes(q) || uRole.includes(q) || assigned.includes(q);
   });
 
   const isUserManagementActive = activeTab === 'manage-users' || activeTab === 'manage-roles';
@@ -3886,7 +3932,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
                       Coordinator Logins
                     </div>
                     <div style={{ fontSize: '1.5rem', fontWeight: '800', color: isDark ? '#f9fafb' : '#0f172a', marginTop: '2px' }}>
-                      {allocUsersList.length}
+                      {displayAllocUsers.length}
                     </div>
                   </div>
                 </div>
@@ -3919,7 +3965,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
                       Allocated Accounts
                     </div>
                     <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#10b981', marginTop: '2px' }}>
-                      {allocUsersList.filter(u => (Array.isArray(u.assignedEvents) && u.assignedEvents.length > 0) || u.eventId).length}
+                      {displayAllocUsers.filter(u => (Array.isArray(u.assignedEvents) && u.assignedEvents.length > 0) || u.eventId).length}
                     </div>
                   </div>
                 </div>
@@ -4046,7 +4092,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <button
-                    onClick={fetchAllocations}
+                    onClick={() => { fetchAllocations(); fetchUsers(); }}
                     style={{
                       ...S.filterBtn,
                       padding: '0.55rem 0.85rem',
@@ -4108,150 +4154,141 @@ export default function AdminDashboard({ token, user, onLogout }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {allocUsersList
-                        .filter(u => {
-                          const q = allocUserSearch.toLowerCase().trim();
-                          if (!q) return true;
-                          const uName = (u.username || '').toLowerCase();
-                          const uRole = (u.role || '').toLowerCase();
-                          const assigned = (Array.isArray(u.assignedEvents) ? u.assignedEvents.join(' ') : (u.eventId || '')).toLowerCase();
-                          return uName.includes(q) || uRole.includes(q) || assigned.includes(q);
-                        })
-                        .map(userItem => {
-                          const assigned = Array.isArray(userItem.assignedEvents) ? userItem.assignedEvents : (userItem.eventId ? [userItem.eventId] : []);
-                          const isAllocated = assigned.length > 0;
+                      {filteredAllocUsers.map(userItem => {
+                        const assigned = Array.isArray(userItem.assignedEvents) ? userItem.assignedEvents : (userItem.eventId ? [userItem.eventId] : []);
+                        const isAllocated = assigned.length > 0;
 
-                          return (
-                            <tr key={userItem.id || userItem.username} style={S.tr}>
-                              <td style={S.td}>
-                                <div style={S.userCell}>
-                                  <div style={{
-                                    ...S.userAvatarSm,
-                                    background: isDark ? 'rgba(57, 255, 136, 0.15)' : '#ecfdf5',
-                                    color: isDark ? '#39FF88' : '#047857',
-                                    border: '1px solid rgba(57, 255, 136, 0.3)'
-                                  }}>
-                                    {(userItem.username || 'U').charAt(0).toUpperCase()}
-                                  </div>
-                                  <div>
-                                    <div style={S.strongText}>{userItem.username}</div>
-                                    <div style={S.tableSubText}>ID: #{userItem.id}</div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              <td style={S.td}>
-                                <span style={{
-                                  ...S.roleBadge,
-                                  background: isDark ? '#1e293b' : '#f1f5f9',
-                                  color: isDark ? '#93c5fd' : '#1e40af',
-                                  border: isDark ? '1px solid #334155' : '1px solid #cbd5e1'
+                        return (
+                          <tr key={userItem.id || userItem.username} style={S.tr}>
+                            <td style={S.td}>
+                              <div style={S.userCell}>
+                                <div style={{
+                                  ...S.userAvatarSm,
+                                  background: isDark ? 'rgba(57, 255, 136, 0.15)' : '#ecfdf5',
+                                  color: isDark ? '#39FF88' : '#047857',
+                                  border: '1px solid rgba(57, 255, 136, 0.3)'
                                 }}>
-                                  {userItem.role}
-                                </span>
-                              </td>
+                                  {(userItem.username || 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div style={S.strongText}>{userItem.username}</div>
+                                  <div style={S.tableSubText}>ID: #{userItem.id}</div>
+                                </div>
+                              </div>
+                            </td>
 
-                              <td style={S.td}>
-                                {isAllocated ? (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                    {assigned.map(evtId => {
-                                      const evtObj = eventsList.find(e => e.id === evtId);
-                                      const isTech = String(evtId).toLowerCase().startsWith('tech');
-                                      return (
-                                        <span
-                                          key={evtId}
-                                          style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '5px',
-                                            background: isDark 
-                                              ? (isTech ? 'rgba(56, 189, 248, 0.15)' : 'rgba(236, 72, 153, 0.15)') 
-                                              : (isTech ? '#eff6ff' : '#fdf2f8'),
-                                            color: isDark 
-                                              ? (isTech ? '#38bdf8' : '#f472b6') 
-                                              : (isTech ? '#0284c7' : '#db2777'),
-                                            border: isDark 
-                                              ? (isTech ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(236, 72, 153, 0.3)') 
-                                              : (isTech ? '1px solid #bae6fd' : '1px solid #fbcfe8'),
-                                            padding: '0.25rem 0.65rem',
-                                            borderRadius: '8px',
-                                            fontSize: '0.8rem',
-                                            fontWeight: '700'
-                                          }}
-                                        >
-                                          <span style={{ fontSize: '0.65rem', opacity: 0.8, textTransform: 'uppercase' }}>
-                                            {evtId}
-                                          </span>
-                                          <span>• {evtObj ? evtObj.name : evtId}</span>
+                            <td style={S.td}>
+                              <span style={{
+                                ...S.roleBadge,
+                                background: isDark ? '#1e293b' : '#f1f5f9',
+                                color: isDark ? '#93c5fd' : '#1e40af',
+                                border: isDark ? '1px solid #334155' : '1px solid #cbd5e1'
+                              }}>
+                                {userItem.role}
+                              </span>
+                            </td>
+
+                            <td style={S.td}>
+                              {isAllocated ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {assigned.map(evtId => {
+                                    const evtObj = eventsList.find(e => e.id === evtId);
+                                    const isTech = String(evtId).toLowerCase().startsWith('tech');
+                                    return (
+                                      <span
+                                        key={evtId}
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '5px',
+                                          background: isDark 
+                                            ? (isTech ? 'rgba(56, 189, 248, 0.15)' : 'rgba(236, 72, 153, 0.15)') 
+                                            : (isTech ? '#eff6ff' : '#fdf2f8'),
+                                          color: isDark 
+                                            ? (isTech ? '#38bdf8' : '#f472b6') 
+                                            : (isTech ? '#0284c7' : '#db2777'),
+                                          border: isDark 
+                                            ? (isTech ? '1px solid rgba(56, 189, 248, 0.3)' : '1px solid rgba(236, 72, 153, 0.3)') 
+                                            : (isTech ? '1px solid #bae6fd' : '1px solid #fbcfe8'),
+                                          padding: '0.25rem 0.65rem',
+                                          borderRadius: '8px',
+                                          fontSize: '0.8rem',
+                                          fontWeight: '700'
+                                        }}
+                                      >
+                                        <span style={{ fontSize: '0.65rem', opacity: 0.8, textTransform: 'uppercase' }}>
+                                          {evtId}
                                         </span>
-                                      );
-                                    })}
-                                  </div>
-                                ) : (
-                                  <span style={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <FaExclamationTriangle size={12} /> No Events Allocated (Cannot view events)
-                                  </span>
-                                )}
-                              </td>
+                                        <span>• {evtObj ? evtObj.name : evtId}</span>
+                                      </span>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#ef4444', fontSize: '0.82rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <FaExclamationTriangle size={12} /> No Events Allocated (Cannot view events)
+                                </span>
+                              )}
+                            </td>
 
-                              <td style={S.td}>
-                                {isAllocated ? (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    background: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5',
-                                    color: '#10b981',
-                                    padding: '0.25rem 0.65rem',
-                                    borderRadius: '999px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '800'
-                                  }}>
-                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
-                                    {assigned.length} {assigned.length === 1 ? 'Event' : 'Events'} Active
-                                  </span>
-                                ) : (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    background: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2',
-                                    color: '#ef4444',
-                                    padding: '0.25rem 0.65rem',
-                                    borderRadius: '999px',
-                                    fontSize: '0.75rem',
-                                    fontWeight: '800'
-                                  }}>
-                                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
-                                    Unassigned
-                                  </span>
-                                )}
-                              </td>
+                            <td style={S.td}>
+                              {isAllocated ? (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5',
+                                  color: '#10b981',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '800'
+                                }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }}></span>
+                                  {assigned.length} {assigned.length === 1 ? 'Event' : 'Events'} Active
+                                </span>
+                              ) : (
+                                <span style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  background: isDark ? 'rgba(239, 68, 68, 0.15)' : '#fef2f2',
+                                  color: '#ef4444',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '999px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '800'
+                                }}>
+                                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }}></span>
+                                  Unassigned
+                                </span>
+                              )}
+                            </td>
 
-                              <td style={{ ...S.td, textAlign: 'right' }}>
-                                <button
-                                  onClick={() => handleOpenAllocModal(userItem)}
-                                  style={{
-                                    ...S.primaryBtn,
-                                    background: isDark ? '#1e3a8a' : '#2563eb',
-                                    padding: '0.45rem 0.9rem',
-                                    fontSize: '0.82rem',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    borderRadius: '8px'
-                                  }}
-                                  title={`Allocate events to ${userItem.username}`}
-                                >
-                                  <FaCalendarAlt size={12} />
-                                  <span>{isAllocated ? 'Edit Allocation' : 'Allocate Event'}</span>
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                            <td style={{ ...S.td, textAlign: 'right' }}>
+                              <button
+                                onClick={() => handleOpenAllocModal(userItem)}
+                                style={{
+                                  ...S.primaryBtn,
+                                  background: isDark ? '#1e3a8a' : '#2563eb',
+                                  padding: '0.45rem 0.9rem',
+                                  fontSize: '0.82rem',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  borderRadius: '8px'
+                                }}
+                                title={`Allocate events to ${userItem.username}`}
+                              >
+                                <FaCalendarAlt size={12} />
+                                <span>{isAllocated ? 'Edit Allocation' : 'Allocate Event'}</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
 
-                      {allocUsersList.length === 0 && (
+                      {filteredAllocUsers.length === 0 && (
                         <tr>
                           <td colSpan={5} style={S.emptyState}>
                             No coordinator accounts found. Click "New Coordinator Account" to create one.
