@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { motion } from 'framer-motion';
 import { getApiUrl } from '../config/api';
 import {
   FaBolt,
@@ -26,70 +25,41 @@ import {
   FaCheckCircle,
   FaSpinner,
   FaHeadset,
-  FaBookOpen,
-  FaTimes
+  FaBookOpen
 } from 'react-icons/fa';
-import { submitRegistration, createPaymentOrder, verifyPaymentAndRegister } from '../services/api.js';
+import events from '../data/events.js';
+import coordinatorsData from '../data/coordinator.js';
+import { submitRegistration } from '../services/api.js';
 
-// Helper to dynamically load official Razorpay Checkout SDK
-const loadRazorpayScript = () => {
-  return new Promise((resolve) => {
-    if (typeof window !== 'undefined' && window.Razorpay) {
-      return resolve(true);
-    }
-    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
-    if (existing) {
-      existing.addEventListener('load', () => resolve(true));
-      existing.addEventListener('error', () => resolve(false));
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
-};
-
-const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
-
-const createEmptyMember = (defaultCollege = '') => ({
-  fullName: '',
-  email: '',
-  phone: '',
-  whatsapp: '',
-  sameAsPhone: true,
-  college: defaultCollege || '',
-  department: '',
-  year: '',
-});
+const YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year', 'Other'];
 
 export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
-  const [eventsList, setEventsList] = useState([]);
-  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [eventsList, setEventsList] = useState(events);
+  // Determine initially selected event
+  const initialEvent = eventId ? (events.find((e) => e.id === eventId || e.id.toLowerCase() === eventId.toLowerCase()) || null) : null;
+  const [selectedEvent, setSelectedEvent] = useState(initialEvent);
 
   useEffect(() => {
     fetch(getApiUrl('/api/events'))
       .then((res) => res.json())
       .then((result) => {
-        if (result.success && Array.isArray(result.data)) {
+        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
           setEventsList(result.data);
           if (eventId) {
             const found = result.data.find(
-              (e) => e.id === eventId || e.id?.toLowerCase() === eventId?.toLowerCase()
+              (e) => e.id === eventId || e.id.toLowerCase() === eventId.toLowerCase()
             );
             if (found) setSelectedEvent(found);
           }
         }
       })
-      .catch((err) => {
-        console.error('Failed to load events in registration page:', err);
-      });
+      .catch(() => {});
   }, [eventId]);
 
-  // Event-specific student coordinators (live from backend DB)
-  const [liveCoordinators, setLiveCoordinators] = useState([]);
+  // Event-specific student coordinators (live from backend with local fallback)
+  const [liveCoordinators, setLiveCoordinators] = useState(() => {
+    return selectedEvent ? (coordinatorsData[selectedEvent.id]?.coordinators || []) : [];
+  });
 
   useEffect(() => {
     if (!selectedEvent?.id) {
@@ -98,6 +68,8 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     }
 
     let isMounted = true;
+    const staticFallback = coordinatorsData[selectedEvent.id]?.coordinators || [];
+
     fetch(getApiUrl(`/api/coordinators/event/${encodeURIComponent(selectedEvent.id)}`))
       .then((res) => res.json())
       .then((result) => {
@@ -105,11 +77,11 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
         if (result.success && Array.isArray(result.data)) {
           setLiveCoordinators(result.data);
         } else {
-          setLiveCoordinators([]);
+          setLiveCoordinators(staticFallback);
         }
       })
       .catch(() => {
-        if (isMounted) setLiveCoordinators([]);
+        if (isMounted) setLiveCoordinators(staticFallback);
       });
 
     return () => {
@@ -121,7 +93,21 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
 
   // Stepper: 'participant' | 'team' | 'review' | 'success'
   const [step, setStep] = useState('participant');
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi'); // 'upi' | 'all'
+
+  useEffect(() => {
+    if (!eventId) {
+      if (onNavigate) {
+        onNavigate('events');
+      } else {
+        window.location.hash = '/events';
+      }
+    } else {
+      const found = eventsList.find((e) => e.id === eventId || e.id.toLowerCase() === eventId.toLowerCase()) || events.find((e) => e.id === eventId || e.id.toLowerCase() === eventId.toLowerCase());
+      if (found) {
+        setSelectedEvent(found);
+      }
+    }
+  }, [eventId, eventsList, onNavigate]);
 
   const formRef = useRef(null);
   const isEsports = selectedEvent ? selectedEvent.id === 'nontech-05' : eventId === 'nontech-05';
@@ -157,44 +143,25 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     teamMembers: [],
   };
 
-  const [fields, setFields] = useState(() => {
-    try {
-      const saved = sessionStorage.getItem('eloquence_reg_draft');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.fields) {
-          return { ...initialFields, ...parsed.fields };
-        }
-      }
-    } catch (e) {}
-    return initialFields;
-  });
-
+  const [fields, setFields] = useState(initialFields);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [serverError, setServerError] = useState(null);
   const [ticketData, setTicketData] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [showEventModal, setShowEventModal] = useState(false);
-  const [modalCategory, setModalCategory] = useState('all');
 
-  // Real-time persistence of entered details so changing event or navigating never loses data
-  useEffect(() => {
-    try {
-      sessionStorage.setItem('eloquence_reg_draft', JSON.stringify({ fields, selectedGame }));
-    } catch (e) {}
-  }, [fields, selectedGame]);
-
-  // Sync when eventId prop or eventsList changes
+  // Sync when eventId prop changes from routing
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
     if (eventId) {
-      if (eventsList.length > 0) {
-        const ev = eventsList.find((e) => e.id === eventId || e.id?.toLowerCase() === eventId.toLowerCase());
-        if (ev) {
-          setSelectedEvent(ev);
-          initTeamMembersForEvent(ev);
-        }
+      const ev = events.find((e) => e.id === eventId || e.id.toLowerCase() === eventId.toLowerCase());
+      if (ev) {
+        setSelectedEvent(ev);
+        setStep('participant');
+        initTeamMembersForEvent(ev);
+      } else {
+        if (onNavigate) onNavigate('events');
+        else window.location.hash = '/events';
       }
     } else {
       if (onNavigate) onNavigate('events');
@@ -203,39 +170,30 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     if (initialGame) {
       setSelectedGame(getValidGame(initialGame));
     }
-  }, [eventId, eventsList, initialGame, onNavigate]);
+  }, [eventId, initialGame, onNavigate]);
 
-  // Helper to pre-populate team members based on event requirements WITHOUT erasing entered data
+  // Helper to pre-populate team members based on event requirements
   const initTeamMembersForEvent = (event) => {
     if (!event) return;
-    setFields((prev) => {
-      const existing = Array.isArray(prev.teamMembers) ? prev.teamMembers : [];
-      let nextMembers = [...existing];
-
-      if (event.feeType === 'per_squad' && event.maxMembers > 1) {
-        // Fixed 4-player squad: 1 lead + 3 members
-        const targetCount = event.maxMembers - 1;
-        while (nextMembers.length < targetCount) {
-          nextMembers.push(createEmptyMember(prev.college));
-        }
-        if (nextMembers.length > targetCount) {
-          nextMembers = nextMembers.slice(0, targetCount);
-        }
-      } else if (event.isTeam && event.minMembers > 1) {
-        // Min members required
-        const minCount = Math.max(1, event.minMembers - 1);
-        while (nextMembers.length < minCount) {
-          nextMembers.push(createEmptyMember(prev.college));
-        }
-        if (event.maxMembers && nextMembers.length > event.maxMembers - 1) {
-          nextMembers = nextMembers.slice(0, event.maxMembers - 1);
-        }
-      }
-      return {
+    if (event.feeType === 'per_squad' && event.maxMembers > 1) {
+      // Fixed 4-player squad: 1 lead + 3 members
+      setFields((prev) => ({
         ...prev,
-        teamMembers: nextMembers,
-      };
-    });
+        teamMembers: Array(event.maxMembers - 1).fill(''),
+      }));
+    } else if (event.isTeam && event.minMembers > 1) {
+      // Min members required
+      const count = Math.max(1, event.minMembers - 1);
+      setFields((prev) => ({
+        ...prev,
+        teamMembers: Array(count).fill(''),
+      }));
+    } else {
+      setFields((prev) => ({
+        ...prev,
+        teamMembers: [],
+      }));
+    }
   };
 
   // Fee calculation using event data
@@ -288,33 +246,15 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     }));
   };
 
-  const handleTeamMemberFieldChange = (index, field, value) => {
+  const handleTeamMemberChange = (index, value) => {
     setFields((prev) => {
       const updated = [...prev.teamMembers];
-      const member = { ...(updated[index] || createEmptyMember(prev.college)), [field]: value };
-      if (field === 'phone' && member.sameAsPhone) {
-        member.whatsapp = value;
-      }
-      updated[index] = member;
+      updated[index] = value;
       return { ...prev, teamMembers: updated };
     });
-    if (errors[`teamMember_${index}_${field}`]) {
-      setErrors((prev) => ({ ...prev, [`teamMember_${index}_${field}`]: undefined }));
+    if (errors[`teamMember_${index}`]) {
+      setErrors((prev) => ({ ...prev, [`teamMember_${index}`]: undefined }));
     }
-    setServerError(null);
-  };
-
-  const handleTeamMemberSameAsPhoneToggle = (index, checked) => {
-    setFields((prev) => {
-      const updated = [...prev.teamMembers];
-      const member = {
-        ...(updated[index] || createEmptyMember(prev.college)),
-        sameAsPhone: checked,
-        whatsapp: checked ? (updated[index]?.phone || '') : ''
-      };
-      updated[index] = member;
-      return { ...prev, teamMembers: updated };
-    });
   };
 
   const addTeamMember = () => {
@@ -322,7 +262,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     if (fields.teamMembers.length + 1 < selectedEvent.maxMembers) {
       setFields((prev) => ({
         ...prev,
-        teamMembers: [...prev.teamMembers, createEmptyMember(prev.college)],
+        teamMembers: [...prev.teamMembers, ''],
       }));
     }
   };
@@ -334,35 +274,18 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     });
     setErrors((prev) => {
       const updated = { ...prev };
-      Object.keys(updated).forEach((key) => {
-        if (key.startsWith(`teamMember_${index}_`)) {
-          delete updated[key];
-        }
-      });
+      delete updated[`teamMember_${index}`];
       return updated;
     });
   };
 
-  // Change Event action - opens modal to pick an event while completely preserving filled data
+  // Change Event action
   const handleChangeEvent = () => {
-    setShowEventModal(true);
-  };
-
-  const handleSelectNewEvent = (ev) => {
-    if (!ev) return;
-    if (ev.id === selectedEvent?.id) {
-      setShowEventModal(false);
-      return;
+    if (onNavigate) {
+      onNavigate('events');
+    } else {
+      window.location.hash = '/events';
     }
-    setSelectedEvent(ev);
-    initTeamMembersForEvent(ev);
-    if (ev.id === 'nontech-05') {
-      setSelectedGame(getValidGame(selectedGame));
-    }
-    // Update hash without losing state
-    window.location.hash = `/register?event=${encodeURIComponent(ev.id)}`;
-    setShowEventModal(false);
-    toast.success(`Event changed to "${ev.name}". All filled details preserved.`);
   };
 
   // Validation
@@ -416,48 +339,10 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     }
 
     fields.teamMembers.forEach((member, idx) => {
-      const num = idx + 2;
-      const memObj = typeof member === 'string' ? { fullName: member } : (member || {});
-
-      // Full Name
-      if (!memObj.fullName?.trim()) {
-        errs[`teamMember_${idx}_fullName`] = `Member ${num} Full Name is required.`;
-      } else if (memObj.fullName.trim().length < 2) {
-        errs[`teamMember_${idx}_fullName`] = `Member ${num} Name must be at least 2 characters.`;
-      }
-
-      // Email
-      if (!memObj.email?.trim()) {
-        errs[`teamMember_${idx}_email`] = `Member ${num} Email Address is required.`;
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(memObj.email.trim())) {
-        errs[`teamMember_${idx}_email`] = `Enter a valid email address for Member ${num}.`;
-      }
-
-      // Mobile Number
-      if (!memObj.phone?.trim()) {
-        errs[`teamMember_${idx}_phone`] = `Member ${num} Mobile Number is required.`;
-      } else if (!/^[6-9]\d{9}$/.test(memObj.phone.trim())) {
-        errs[`teamMember_${idx}_phone`] = `Enter a valid 10-digit mobile number for Member ${num}.`;
-      }
-
-      // WhatsApp (validated if entered)
-      if (memObj.whatsapp?.trim() && !/^[6-9]\d{9}$/.test(memObj.whatsapp.trim())) {
-        errs[`teamMember_${idx}_whatsapp`] = `Enter a valid 10-digit WhatsApp number for Member ${num}.`;
-      }
-
-      // College
-      if (!memObj.college?.trim()) {
-        errs[`teamMember_${idx}_college`] = `Member ${num} College / Institution is required.`;
-      }
-
-      // Department
-      if (!memObj.department?.trim()) {
-        errs[`teamMember_${idx}_department`] = `Member ${num} Department / Branch is required.`;
-      }
-
-      // Year of study
-      if (!memObj.year) {
-        errs[`teamMember_${idx}_year`] = `Please select Year of Study for Member ${num}.`;
+      if (!member || !member.trim()) {
+        errs[`teamMember_${idx}`] = `Member ${idx + 2} Full Name is required.`;
+      } else if (member.trim().length < 2) {
+        errs[`teamMember_${idx}`] = `Member ${idx + 2} Name must be at least 2 characters.`;
       }
     });
 
@@ -498,7 +383,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     window.scrollTo({ top: 120, behavior: 'smooth' });
   };
 
-  // Final submission with Razorpay Payment Integration
+  // Final submission
   const handleFinalSubmit = async () => {
     // Validate everything once more
     const pErrors = validateParticipant();
@@ -514,28 +399,59 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
     setIsSubmitting(true);
     setServerError(null);
 
-    const activeEventPayload = isEsports
-      ? { ...selectedEvent, name: `${selectedEvent.name} (${selectedGame})`, game: selectedGame }
-      : selectedEvent;
+    const payload = {
+      fullName: fields.fullName,
+      email: fields.email,
+      phone: fields.phone,
+      whatsapp: fields.whatsapp || null,
+      college: fields.college,
+      department: fields.department,
+      year: fields.year,
+      eventId: selectedEvent.id,
+      eventName: isEsports ? `${selectedEvent.name} (${selectedGame})` : selectedEvent.name,
+      eventCategory: selectedEvent.category,
+      game: isEsports ? selectedGame : null,
+      isTeam: selectedEvent.isTeam,
+      teamName: fields.teamName || null,
+      teamMembers: fields.teamMembers || [],
+      feePerHead: selectedEvent.feePerHead,
+      totalFee: feeInfo.total,
+      feeFormula: feeInfo.formula,
+    };
 
-    const totalPayable = Number(feeInfo.total) || 0;
-
-    // ── CASE A: FREE EVENT (totalFee === 0) ──
-    if (totalPayable === 0) {
-      try {
-        const response = await fetch(getApiUrl('/api/register'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            currentEvent: activeEventPayload,
-            fields,
-            totalFee: 0,
-            game: isEsports ? selectedGame : null
-          })
-        });
-        const data = await response.json();
+    try {
+      const result = await submitRegistration(payload);
+      if (result.success) {
+        setTicketData(result.data);
+        setStep('success');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        setServerError(result.error || 'Registration submission failed. Please try again.');
+      }
+    } catch (err) {
+      console.error('Submission error:', err);
+      setServerError('An unexpected network error occurred. Please verify your connection.');
+    } finally {
+      setIsSubmitting(false);
+    }
+    fetch(getApiUrl('/api/register'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        currentEvent: isEsports 
+          ? { ...selectedEvent, name: `${selectedEvent.name} (${selectedGame})`, game: selectedGame }
+          : selectedEvent,
+        fields,
+        totalFee: feeInfo.total,
+        game: isEsports ? selectedGame : null
+      }),
+    })
+      .then(res => res.json())
+      .then(data => {
         if (data.success) {
-          toast.success('Registration confirmed!');
+          toast.success('Registration successful!');
           const resTicket = data.ticketData || {};
           setTicketData({
             ...resTicket,
@@ -546,199 +462,62 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
             year: fields.year,
             phone: fields.phone,
             email: fields.email,
-            eventName: activeEventPayload.name,
+            eventName: isEsports ? `${selectedEvent.name} (${selectedGame})` : selectedEvent.name,
             eventCategory: selectedEvent.category,
             isTeam: selectedEvent.isTeam,
             teamName: fields.teamName,
             participantCount: 1 + (fields.teamMembers ? fields.teamMembers.length : 0),
-            totalFee: 0,
-            totalAmount: 0,
-            paymentStatus: 'FREE',
-            paymentMethod: 'FREE_EVENT',
+            totalFee: feeInfo.total,
             game: isEsports ? selectedGame : null
           });
           setStep('success');
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          if (formRef.current) {
+            formRef.current.scrollIntoView({ behavior: 'smooth' });
+          }
         } else {
-          toast.error('Registration failed: ' + (data.message || 'Server error'));
-          setServerError(data.message || 'Registration failed.');
+          toast.error('Registration failed: ' + (data.errorDetails || data.message || 'Unknown error'));
         }
-      } catch (err) {
-        console.error('Free registration error:', err);
-        toast.error('Server connection error. Please try again.');
-        setServerError('Network error while communicating with registration server.');
-      } finally {
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    // ── CASE B: PAID EVENT → RAZORPAY PAYMENT FLOW ──
-    try {
-      // 1. Ensure Razorpay Checkout SDK is loaded
-      const isLoaded = await loadRazorpayScript();
-      if (!isLoaded) {
-        toast.error('Could not load Razorpay payment gateway. Please check your internet connection.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Leader's WhatsApp number in proper international +91 format (fetching directly from WhatsApp)
-      const whatsappRaw = (fields.whatsapp && fields.whatsapp.trim()) || (fields.phone && fields.phone.trim()) || '';
-      const clean10Digits = whatsappRaw.replace(/\D/g, '').slice(-10);
-      const formattedContact = clean10Digits.length === 10
-        ? `+91${clean10Digits}`
-        : (whatsappRaw.startsWith('+91') ? whatsappRaw : (whatsappRaw ? `+91${whatsappRaw}` : ''));
-
-      // 2. Request backend to create Razorpay Order
-      const orderPayload = {
-        currentEvent: activeEventPayload,
-        fields: {
-          ...fields,
-          whatsapp: whatsappRaw,
-          phone: whatsappRaw || fields.phone,
-          contact: formattedContact
-        },
-        totalFee: totalPayable,
-        game: isEsports ? selectedGame : null
-      };
-
-      const orderData = await createPaymentOrder(orderPayload);
-      if (!orderData.success || !orderData.orderId) {
-        toast.error(orderData.message || 'Failed to initialize payment order.');
-        setServerError(orderData.message || 'Could not initiate secure payment order with Razorpay.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 3. Configure and Launch Razorpay Checkout Popup
-      const isUpiPreferred = selectedPaymentMethod === 'upi';
-
-      const options = {
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency || 'INR',
-        name: "ELOQUENCE '26",
-        description: `Registration for ${activeEventPayload.name}`,
-        order_id: orderData.orderId,
-        prefill: {
-          name: fields.fullName?.trim() || '',
-          email: fields.email?.trim() || '',
-          contact: formattedContact,
-          ...(isUpiPreferred ? { method: 'upi' } : {})
-        },
-        readonly: {
-          contact: true,
-          email: true
-        },
-        config: isUpiPreferred ? {
-          display: {
-            blocks: {
-              upi: {
-                name: "Pay via UPI (GPay, PhonePe, Paytm, QR)",
-                instruments: [
-                  {
-                    method: "upi"
-                  }
-                ]
-              },
-              other: {
-                name: "Cards, Netbanking & Other Modes",
-                instruments: [
-                  {
-                    method: "card"
-                  },
-                  {
-                    method: "netbanking"
-                  },
-                  {
-                    method: "wallet"
-                  }
-                ]
-              }
-            },
-            sequence: ["block.upi", "block.other"],
-            preferences: {
-              show_default_blocks: true
-            }
-          }
-        } : undefined,
-        notes: {
-          event: activeEventPayload.name,
-          category: selectedEvent.category,
+      })
+      .catch(async (err) => {
+        console.warn('API fetch failed, trying local fallback:', err);
+        const payload = {
+          fullName: fields.fullName,
+          email: fields.email,
+          phone: fields.phone,
+          whatsapp: fields.whatsapp || null,
           college: fields.college,
-          team: fields.teamName || 'Solo',
-          contact: formattedContact,
-          whatsapp: formattedContact,
-          phone: formattedContact,
-          chosenPaymentMethod: isUpiPreferred ? 'UPI' : 'CARDS_NETBANKING'
-        },
-        theme: {
-          color: '#00f5ff'
-        },
-        modal: {
-          ondismiss: () => {
-            setIsSubmitting(false);
-            toast('Payment window closed. You can review your details and retry payment anytime.', {
-              icon: 'ℹ️'
-            });
-          }
-        },
-        handler: async (response) => {
-          setIsSubmitting(true);
-          try {
-            // 4. Send payment proof to backend for HMAC verification and Supabase persistence
-            const verifyRes = await verifyPaymentAndRegister({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              currentEvent: activeEventPayload,
-              fields: {
-                ...fields,
-                whatsapp: whatsappRaw,
-                phone: whatsappRaw || fields.phone,
-                contact: formattedContact
-              },
-              totalFee: totalPayable,
-              game: isEsports ? selectedGame : null,
-              paymentMethod: isUpiPreferred ? 'RAZORPAY_UPI' : 'RAZORPAY'
-            });
-
-            if (verifyRes.success && verifyRes.ticketData) {
-              toast.success('Payment verified! Registration successfully confirmed.');
-              setTicketData(verifyRes.ticketData);
-              setStep('success');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            } else {
-              const errMsg = verifyRes.message || 'Payment verification failed on server.';
-              toast.error(errMsg);
-              setServerError(errMsg);
+          department: fields.department,
+          year: fields.year,
+          eventId: selectedEvent.id,
+          eventName: isEsports ? `${selectedEvent.name} (${selectedGame})` : selectedEvent.name,
+          eventCategory: selectedEvent.category,
+          game: isEsports ? selectedGame : null,
+          isTeam: selectedEvent.isTeam,
+          teamName: fields.teamName || null,
+          teamMembers: fields.teamMembers || [],
+          feePerHead: selectedEvent.feePerHead,
+          totalFee: feeInfo.total,
+          feeFormula: feeInfo.formula,
+        };
+        try {
+          const result = await submitRegistration(payload);
+          if (result.success) {
+            toast.success('Registration saved!');
+            setTicketData(result.data);
+            setStep('success');
+            if (formRef.current) {
+              formRef.current.scrollIntoView({ behavior: 'smooth' });
             }
-          } catch (verifyErr) {
-            console.error('Verification error:', verifyErr);
-            toast.error(
-              `Network error confirming payment. Please note Payment ID: ${response.razorpay_payment_id} and contact coordinators.`
-            );
-            setServerError('Server error during payment verification. Payment ID: ' + response.razorpay_payment_id);
-          } finally {
-            setIsSubmitting(false);
+          } else {
+            toast.error('Registration failed: ' + (result.error || 'Server error'));
           }
+        } catch (fallbackErr) {
+          toast.error('Something went wrong connecting to the server. Please try again.');
         }
-      };
-
-      const rzpInstance = new window.Razorpay(options);
-      rzpInstance.on('payment.failed', function (failureRes) {
-        console.error('Razorpay Payment Failed:', failureRes.error);
-        toast.error(`Payment failed: ${failureRes.error.description || failureRes.error.reason || 'Transaction could not be completed.'}`);
+      })
+      .finally(() => {
         setIsSubmitting(false);
       });
-      rzpInstance.open();
-
-    } catch (paymentErr) {
-      console.error('Razorpay initialization error:', paymentErr);
-      toast.error('Unexpected error launching Razorpay checkout. Please try again.');
-      setIsSubmitting(false);
-    }
   };
 
   const handleCopyId = () => {
@@ -758,62 +537,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
   };
 
   if (!selectedEvent) {
-    return (
-      <div className="registration-page" style={{ minHeight: '75vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          className="events-loading-container"
-          style={{ padding: '3rem 1.5rem', maxWidth: '480px' }}
-        >
-          {/* High-tech cyberpunk orbital radar loader */}
-          <div className="cyber-loader-wrap">
-            <motion.div
-              className="cyber-orbit-ring-outer"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
-            />
-            <motion.div
-              className="cyber-orbit-ring-inner"
-              animate={{ rotate: -360 }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
-            />
-            <motion.div
-              className="cyber-loader-core"
-              animate={{
-                scale: [0.92, 1.08, 0.92],
-                boxShadow: [
-                  '0 0 15px rgba(57, 255, 136, 0.4)',
-                  '0 0 28px rgba(0, 240, 255, 0.75)',
-                  '0 0 15px rgba(57, 255, 136, 0.4)',
-                ],
-              }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <FaBolt className="cyber-loader-icon" />
-            </motion.div>
-          </div>
-
-          <div className="cyber-loading-meta">
-            <h4 className="cyber-loading-title">LOADING REGISTRATION</h4>
-            <p className="cyber-loading-subtext">
-              Preparing registration gateway
-              <span className="cyber-loading-dots">
-                <span>.</span><span>.</span><span>.</span>
-              </span>
-            </p>
-            <div className="cyber-loading-beam-wrap">
-              <motion.div
-                className="cyber-loading-beam"
-                animate={{ x: ['-100%', '100%'] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -946,6 +670,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="e.g. Syed Subhan"
                         value={fields.fullName}
                         onChange={(e) => handleChange('fullName', e.target.value)}
                         required
@@ -961,6 +686,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       <input
                         type="email"
                         className="form-input"
+                        placeholder="e.g. student@example.com"
                         value={fields.email}
                         onChange={(e) => handleChange('email', e.target.value)}
                         required
@@ -976,6 +702,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       <input
                         type="tel"
                         className="form-input"
+                        placeholder="10-digit Indian Mobile"
                         maxLength={10}
                         value={fields.phone}
                         onChange={(e) => handleChange('phone', e.target.value.replace(/\D/g, ''))}
@@ -1000,6 +727,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       <input
                         type="tel"
                         className="form-input"
+                        placeholder="10-digit WhatsApp Number"
                         maxLength={10}
                         value={fields.whatsapp}
                         onChange={(e) => handleChange('whatsapp', e.target.value.replace(/\D/g, ''))}
@@ -1016,6 +744,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="e.g. C. Abdul Hakeem College of Engineering & Tech"
                         value={fields.college}
                         onChange={(e) => handleChange('college', e.target.value)}
                         required
@@ -1031,6 +760,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       <input
                         type="text"
                         className="form-input"
+                        placeholder="e.g. Computer Science & Engineering"
                         value={fields.department}
                         onChange={(e) => handleChange('department', e.target.value)}
                         required
@@ -1062,7 +792,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
 
                   <div className="panel-actions-row">
                     <button type="button" className="btn btn-secondary" onClick={handleChangeEvent}>
-                      <FaExchangeAlt style={{ marginRight: '0.4rem' }} /> CHANGE EVENT
+                      <FaArrowLeft style={{ marginRight: '0.4rem' }} /> BACK TO EVENTS
                     </button>
                     <button type="submit" className="btn btn-primary">
                       {selectedEvent.isTeam ? (
@@ -1103,6 +833,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                     <input
                       type="text"
                       className="form-input"
+                      placeholder="e.g. Doom Hackers / Byte Knights"
                       value={fields.teamName}
                       onChange={(e) => handleChange('teamName', e.target.value)}
                       required
@@ -1114,11 +845,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                   <div className="leader-preview-card">
                     <div className="leader-badge">MEMBER 1 (SQUAD LEADER)</div>
                     <div className="leader-name">{fields.fullName || 'Lead Participant'}</div>
-                    <div className="leader-info">
-                      {fields.department && `${fields.department} • `}
-                      {fields.year && `${fields.year} • `}
-                      {fields.phone || fields.whatsapp} • {fields.email}
-                    </div>
+                    <div className="leader-info">{fields.email} • {fields.phone}</div>
                   </div>
 
                   {/* Additional Members List */}
@@ -1129,174 +856,39 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       <p className="no-members-hint">No extra members added yet. You can compete as a solo participant or add team members below.</p>
                     )}
 
-                    {fields.teamMembers.map((member, idx) => {
-                      const m = typeof member === 'string' ? { ...createEmptyMember(fields.college), fullName: member } : (member || createEmptyMember(fields.college));
-                      return (
-                        <div
-                          key={idx}
-                          className="team-member-entry"
-                          id={`field-teamMember_${idx}`}
-                          style={{ marginBottom: '1.25rem' }}
-                        >
-                          <div className="team-member-row-label" style={{ marginBottom: '0.85rem', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.74rem', fontWeight: '800', color: 'var(--bright-green)', letterSpacing: '0.1em' }}>
-                                MEMBER {idx + 2} DETAILS
-                              </span>
-                              <span style={{ fontSize: '0.65rem', background: 'rgba(57, 255, 136, 0.1)', color: 'var(--bright-green)', padding: '0.12rem 0.45rem', borderRadius: '4px', fontWeight: '700' }}>
-                                SQUAD MEMBER
-                              </span>
-                            </div>
-                            {selectedEvent.feeType !== 'per_squad' && (
-                              <button
-                                type="button"
-                                className="remove-member-btn"
-                                onClick={() => removeTeamMember(idx)}
-                              >
-                                Remove Member
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="form-grid-2col">
-                            {/* Full Name */}
-                            <div className={`form-group ${errors[`teamMember_${idx}_fullName`] ? 'form-group-error' : ''}`} id={`field-teamMember_${idx}_fullName`}>
-                              <label className="form-label">
-                                Full Name <span className="required-star">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                className="form-input"
-                                value={m.fullName || ''}
-                                onChange={(e) => handleTeamMemberFieldChange(idx, 'fullName', e.target.value)}
-                                required
-                              />
-                              {errors[`teamMember_${idx}_fullName`] && (
-                                <span className="error-message">{errors[`teamMember_${idx}_fullName`]}</span>
-                              )}
-                            </div>
-
-                            {/* Email */}
-                            <div className={`form-group ${errors[`teamMember_${idx}_email`] ? 'form-group-error' : ''}`} id={`field-teamMember_${idx}_email`}>
-                              <label className="form-label">
-                                Email Address <span className="required-star">*</span>
-                              </label>
-                              <input
-                                type="email"
-                                className="form-input"
-                                value={m.email || ''}
-                                onChange={(e) => handleTeamMemberFieldChange(idx, 'email', e.target.value)}
-                                required
-                              />
-                              {errors[`teamMember_${idx}_email`] && (
-                                <span className="error-message">{errors[`teamMember_${idx}_email`]}</span>
-                              )}
-                            </div>
-
-                            {/* Mobile Phone */}
-                            <div className={`form-group ${errors[`teamMember_${idx}_phone`] ? 'form-group-error' : ''}`} id={`field-teamMember_${idx}_phone`}>
-                              <label className="form-label">
-                                Mobile Number <span className="required-star">*</span>
-                              </label>
-                              <input
-                                type="tel"
-                                className="form-input"
-                                maxLength={10}
-                                value={m.phone || ''}
-                                onChange={(e) => handleTeamMemberFieldChange(idx, 'phone', e.target.value.replace(/\D/g, ''))}
-                                required
-                              />
-                              {errors[`teamMember_${idx}_phone`] && (
-                                <span className="error-message">{errors[`teamMember_${idx}_phone`]}</span>
-                              )}
-                            </div>
-
-                            {/* WhatsApp */}
-                            <div className={`form-group ${errors[`teamMember_${idx}_whatsapp`] ? 'form-group-error' : ''}`} id={`field-teamMember_${idx}_whatsapp`}>
-                              <div className="whatsapp-label-row">
-                                <label className="form-label">WhatsApp Number</label>
-                                <label className="same-as-phone-toggle">
-                                  <input
-                                    type="checkbox"
-                                    checked={m.sameAsPhone !== false}
-                                    onChange={(e) => handleTeamMemberSameAsPhoneToggle(idx, e.target.checked)}
-                                  />
-                                  <span>Same as Mobile</span>
-                                </label>
-                              </div>
-                              <input
-                                type="tel"
-                                className="form-input"
-                                maxLength={10}
-                                value={m.whatsapp || ''}
-                                onChange={(e) => handleTeamMemberFieldChange(idx, 'whatsapp', e.target.value.replace(/\D/g, ''))}
-                                disabled={m.sameAsPhone !== false}
-                              />
-                              {errors[`teamMember_${idx}_whatsapp`] && (
-                                <span className="error-message">{errors[`teamMember_${idx}_whatsapp`]}</span>
-                              )}
-                            </div>
-
-                            {/* College */}
-                            <div className={`form-group ${errors[`teamMember_${idx}_college`] ? 'form-group-error' : ''}`} id={`field-teamMember_${idx}_college`}>
-                              <label className="form-label">
-                                College / Institution <span className="required-star">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                className="form-input"
-                                value={m.college || ''}
-                                onChange={(e) => handleTeamMemberFieldChange(idx, 'college', e.target.value)}
-                                required
-                              />
-                              {errors[`teamMember_${idx}_college`] && (
-                                <span className="error-message">{errors[`teamMember_${idx}_college`]}</span>
-                              )}
-                            </div>
-
-                            {/* Department */}
-                            <div className={`form-group ${errors[`teamMember_${idx}_department`] ? 'form-group-error' : ''}`} id={`field-teamMember_${idx}_department`}>
-                              <label className="form-label">
-                                Department / Branch <span className="required-star">*</span>
-                              </label>
-                              <input
-                                type="text"
-                                className="form-input"
-                                value={m.department || ''}
-                                onChange={(e) => handleTeamMemberFieldChange(idx, 'department', e.target.value)}
-                                required
-                              />
-                              {errors[`teamMember_${idx}_department`] && (
-                                <span className="error-message">{errors[`teamMember_${idx}_department`]}</span>
-                              )}
-                            </div>
-
-                            {/* Year of Study */}
-                            <div className={`form-group form-group-full ${errors[`teamMember_${idx}_year`] ? 'form-group-error' : ''}`} id={`field-teamMember_${idx}_year`}>
-                              <label className="form-label">
-                                Year of Study <span className="required-star">*</span>
-                              </label>
-                              <select
-                                className="form-select"
-                                value={m.year || ''}
-                                onChange={(e) => handleTeamMemberFieldChange(idx, 'year', e.target.value)}
-                                required
-                              >
-                                <option value="">-- Select Year of Study --</option>
-                                {YEARS.map((y) => (
-                                  <option key={y} value={y}>
-                                    {y}
-                                  </option>
-                                ))}
-                              </select>
-                              {errors[`teamMember_${idx}_year`] && (
-                                <span className="error-message">{errors[`teamMember_${idx}_year`]}</span>
-                              )}
-                            </div>
-                          </div>
+                    {fields.teamMembers.map((member, idx) => (
+                      <div
+                        key={idx}
+                        className={`form-group team-member-entry ${errors[`teamMember_${idx}`] ? 'form-group-error' : ''}`}
+                        id={`field-teamMember_${idx}`}
+                      >
+                        <div className="team-member-row-label">
+                          <label className="form-label">
+                            Member {idx + 2} Full Name <span className="required-star">*</span>
+                          </label>
+                          {selectedEvent.feeType !== 'per_squad' && (
+                            <button
+                              type="button"
+                              className="remove-member-btn"
+                              onClick={() => removeTeamMember(idx)}
+                            >
+                              Remove
+                            </button>
+                          )}
                         </div>
-                      );
-                    })}
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder={`Enter Full Name of Member ${idx + 2}`}
+                          value={member}
+                          onChange={(e) => handleTeamMemberChange(idx, e.target.value)}
+                          required
+                        />
+                        {errors[`teamMember_${idx}`] && (
+                          <span className="error-message">{errors[`teamMember_${idx}`]}</span>
+                        )}
+                      </div>
+                    ))}
 
                     {/* Add Member Button if limit not reached */}
                     {selectedEvent.feeType !== 'per_squad' && fields.teamMembers.length + 1 < selectedEvent.maxMembers && (
@@ -1354,9 +946,9 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                 </div>
 
                 <div className="summary-desk-note">
-                  <div className="desk-note-icon">🔒</div>
+                  <div className="desk-note-icon">ℹ</div>
                   <p>
-                    <strong>Secure Razorpay Checkout:</strong> Instant online verification via UPI, Cards, Netbanking & Wallets with official E-Pass ticket generation.
+                    <strong>On-Site Desk Payment:</strong> Payment will be settled at the CAHCET campus registration desk upon reporting on September 26, 2026.
                   </p>
                 </div>
 
@@ -1519,27 +1111,15 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       </div>
                       <div className="review-row">
                         <span className="r-label">Leader (Member 1):</span>
-                        <span className="r-val">
-                          <strong>{fields.fullName}</strong>
-                          <span style={{ display: 'block', fontSize: '0.78rem', color: '#9cb1a2' }}>
-                            {[fields.department, fields.year, fields.phone].filter(Boolean).join(' • ')}
-                          </span>
-                        </span>
+                        <span className="r-val">{fields.fullName}</span>
                       </div>
                       {fields.teamMembers.length > 0 ? (
-                        fields.teamMembers.map((m, idx) => {
-                          const mName = typeof m === 'string' ? m : (m.fullName || `Member ${idx + 2}`);
-                          const mInfo = typeof m === 'object' ? [m.department, m.year, m.phone].filter(Boolean).join(' • ') : '';
-                          return (
-                            <div key={idx} className="review-row">
-                              <span className="r-label">Member {idx + 2}:</span>
-                              <span className="r-val">
-                                <strong>{mName}</strong>
-                                {mInfo && <span style={{ display: 'block', fontSize: '0.78rem', color: '#9cb1a2' }}>{mInfo}</span>}
-                              </span>
-                            </div>
-                          );
-                        })
+                        fields.teamMembers.map((m, idx) => (
+                          <div key={idx} className="review-row">
+                            <span className="r-label">Member {idx + 2}:</span>
+                            <span className="r-val">{m}</span>
+                          </div>
+                        ))
                       ) : (
                         <div className="review-row">
                           <span className="r-label">Additional Members:</span>
@@ -1575,98 +1155,8 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                       </span>
                     </div>
                   </div>
-
-                  {/* UPI & Payment Mode Selection (Inside Razorpay Gateway) */}
-                  {feeInfo.total > 0 && (
-                    <div className="payment-selection-container" style={{ marginTop: '1.35rem', paddingTop: '1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
-                        <span style={{ fontSize: '0.78rem', fontWeight: '700', letterSpacing: '0.08em', color: '#00f5ff', textTransform: 'uppercase' }}>
-                          CHOOSE PAYMENT MODE (POWERED BY RAZORPAY)
-                        </span>
-                        <span style={{ fontSize: '0.72rem', color: 'rgba(255, 255, 255, 0.65)', display: 'flex', alignItems: 'center' }}>
-                          <FaShieldAlt style={{ marginRight: '0.3rem', color: '#00f5ff' }} /> 100% Encrypted & Secure
-                        </span>
-                      </div>
-
-                      <div className="payment-options-grid">
-                        {/* Option 1: UPI */}
-                        <div
-                          className={`payment-option-card ${selectedPaymentMethod === 'upi' ? 'selected-payment-card' : ''}`}
-                          onClick={() => setSelectedPaymentMethod('upi')}
-                          style={{
-                            cursor: 'pointer',
-                            padding: '1.1rem 1.25rem',
-                            borderRadius: '8px',
-                            border: selectedPaymentMethod === 'upi' ? '2px solid #00f5ff' : '1px solid rgba(255, 255, 255, 0.12)',
-                            background: selectedPaymentMethod === 'upi' ? 'rgba(0, 245, 255, 0.08)' : 'rgba(255, 255, 255, 0.02)',
-                            boxShadow: selectedPaymentMethod === 'upi' ? '0 0 20px rgba(0, 245, 255, 0.22)' : 'none',
-                            transition: 'all 0.2s ease',
-                            position: 'relative'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '1.25rem' }}>⚡</span>
-                              <strong style={{ fontSize: '0.95rem', color: '#ffffff', letterSpacing: '0.04em' }}>UPI PAYMENT</strong>
-                            </div>
-                            <span style={{ fontSize: '0.62rem', fontWeight: '800', background: 'linear-gradient(90deg, #00f5ff, #3b82f6)', color: '#000', padding: '0.2rem 0.55rem', borderRadius: '4px' }}>
-                              POPULAR / INSTANT
-                            </span>
-                          </div>
-                          <p style={{ margin: '0.35rem 0 0.75rem', fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.4' }}>
-                            Pay instantly using Google Pay, PhonePe, Paytm, BHIM, or by scanning UPI QR.
-                          </p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                            {['Google Pay', 'PhonePe', 'Paytm', 'BHIM / UPI QR'].map((app, i) => (
-                              <span key={i} style={{ fontSize: '0.7rem', fontWeight: '600', padding: '0.2rem 0.5rem', background: selectedPaymentMethod === 'upi' ? 'rgba(0, 245, 255, 0.15)' : 'rgba(255, 255, 255, 0.06)', borderRadius: '4px', border: selectedPaymentMethod === 'upi' ? '1px solid rgba(0, 245, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)', color: selectedPaymentMethod === 'upi' ? '#00f5ff' : 'rgba(255, 255, 255, 0.8)' }}>
-                                {app}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Option 2: Cards & Netbanking */}
-                        <div
-                          className={`payment-option-card ${selectedPaymentMethod === 'all' ? 'selected-payment-card' : ''}`}
-                          onClick={() => setSelectedPaymentMethod('all')}
-                          style={{
-                            cursor: 'pointer',
-                            padding: '1.1rem 1.25rem',
-                            borderRadius: '8px',
-                            border: selectedPaymentMethod === 'all' ? '2px solid #00f5ff' : '1px solid rgba(255, 255, 255, 0.12)',
-                            background: selectedPaymentMethod === 'all' ? 'rgba(0, 245, 255, 0.08)' : 'rgba(255, 255, 255, 0.02)',
-                            boxShadow: selectedPaymentMethod === 'all' ? '0 0 20px rgba(0, 245, 255, 0.22)' : 'none',
-                            transition: 'all 0.2s ease',
-                            position: 'relative'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <span style={{ fontSize: '1.25rem' }}>💳</span>
-                              <strong style={{ fontSize: '0.95rem', color: '#ffffff', letterSpacing: '0.04em' }}>CARDS & NETBANKING</strong>
-                            </div>
-                          </div>
-                          <p style={{ margin: '0.35rem 0 0.75rem', fontSize: '0.8rem', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.4' }}>
-                            Pay with Debit / Credit Cards (Visa, MasterCard, RuPay), Netbanking or Wallets.
-                          </p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
-                            {['Debit Cards', 'Credit Cards', 'Net Banking', 'Wallets'].map((item, i) => (
-                              <span key={i} style={{ fontSize: '0.7rem', fontWeight: '600', padding: '0.2rem 0.5rem', background: selectedPaymentMethod === 'all' ? 'rgba(0, 245, 255, 0.15)' : 'rgba(255, 255, 255, 0.06)', borderRadius: '4px', border: selectedPaymentMethod === 'all' ? '1px solid rgba(0, 245, 255, 0.3)' : '1px solid rgba(255, 255, 255, 0.1)', color: selectedPaymentMethod === 'all' ? '#00f5ff' : 'rgba(255, 255, 255, 0.8)' }}>
-                                {item}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   <p className="fin-desk-reminder">
-                    {feeInfo.total === 0
-                      ? '* Free event entry. Registration will be confirmed immediately.'
-                      : selectedPaymentMethod === 'upi'
-                      ? '* Fast UPI checkout: Opens directly with Google Pay, PhonePe, Paytm or UPI QR Code scan.'
-                      : '* Secured by Razorpay. Supports all major bank Credit/Debit Cards, Netbanking & Wallets.'}
+                    * Registration status will be marked as <strong>CONFIRMED</strong> with payment settled at on-site helpdesk.
                   </p>
                 </div>
 
@@ -1714,24 +1204,15 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                   className="btn btn-primary btn-confirm-submit"
                   onClick={handleFinalSubmit}
                   disabled={isSubmitting}
-                  style={feeInfo.total > 0 ? { background: selectedPaymentMethod === 'upi' ? 'linear-gradient(135deg, #00f5ff 0%, #0284c7 100%)' : 'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)', boxShadow: '0 0 22px rgba(0, 245, 255, 0.45)', color: '#000', fontWeight: '800' } : {}}
                 >
                   {isSubmitting ? (
                     <>
                       <FaSpinner className="spinner-rotate" style={{ marginRight: '0.5rem' }} />
-                      OPENING RAZORPAY GATEWAY...
-                    </>
-                  ) : feeInfo.total === 0 ? (
-                    <>CONFIRM REGISTRATION (FREE) →</>
-                  ) : selectedPaymentMethod === 'upi' ? (
-                    <>
-                      <span style={{ marginRight: '0.45rem', fontSize: '1.05rem' }}>⚡</span>
-                      PAY ₹{feeInfo.total} VIA UPI (RAZORPAY) →
+                      TRANSMITTING TO TERMINAL...
                     </>
                   ) : (
                     <>
-                      <FaShieldAlt style={{ marginRight: '0.45rem' }} />
-                      PROCEED TO PAY ₹{feeInfo.total} VIA RAZORPAY →
+                      CONFIRM REGISTRATION →
                     </>
                   )}
                 </button>
@@ -1805,20 +1286,7 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                 {ticketData.isTeam && ticketData.teamName && (
                   <div className="ticket-info-item">
                     <span className="ticket-label">SQUAD / TEAM NAME</span>
-                    <span className="ticket-val">{ticketData.teamName} ({ticketData.participantCount || (1 + (ticketData.teamMembersList?.length || 0))} Total)</span>
-                  </div>
-                )}
-                {ticketData.isTeam && ticketData.teamMembersList && ticketData.teamMembersList.length > 0 && (
-                  <div className="ticket-info-item" style={{ gridColumn: '1 / -1' }}>
-                    <span className="ticket-label">SQUAD MEMBERS</span>
-                    <span className="ticket-val">
-                      1. {ticketData.fullName} (Leader)<br />
-                      {ticketData.teamMembersList.map((tm, i) => (
-                        <span key={i} style={{ display: 'inline-block', marginRight: '0.75rem' }}>
-                          {i + 2}. {typeof tm === 'string' ? tm : (tm.fullName || tm.name)}
-                        </span>
-                      ))}
-                    </span>
+                    <span className="ticket-val">{ticketData.teamName} ({ticketData.participantCount} Total)</span>
                   </div>
                 )}
                 {(ticketData.game || isEsports) && (
@@ -1828,42 +1296,17 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
                   </div>
                 )}
                 <div className="ticket-info-item">
-                  <span className="ticket-label">PAYMENT STATUS</span>
-                  <span className="ticket-val status-confirmed" style={{ color: '#10b981' }}>
+                  <span className="ticket-label">REGISTRATION STATUS</span>
+                  <span className="ticket-val status-confirmed">
                     <FaCheckCircle style={{ marginRight: '0.35rem', verticalAlign: '-1px' }} />
-                    {ticketData.paymentStatus === 'PAID'
-                      ? 'PAID ONLINE (VERIFIED)'
-                      : ticketData.paymentStatus === 'FREE'
-                      ? 'FREE ENTRY'
-                      : (ticketData.paymentStatus || 'CONFIRMED')}
+                    {ticketData.registrationStatus || 'CONFIRMED'}
                   </span>
                 </div>
 
                 <div className="ticket-info-item">
-                  <span className="ticket-label">PAYMENT MODE</span>
-                  <span className="ticket-val" style={{ color: '#00f5ff', fontWeight: '700' }}>
-                    {ticketData.paymentMethod === 'RAZORPAY_UPI'
-                      ? '⚡ UPI (Razorpay)'
-                      : ticketData.paymentMethod === 'RAZORPAY'
-                      ? '💳 Cards / Netbanking (Razorpay)'
-                      : (ticketData.paymentMethod || 'ONLINE')}
-                  </span>
-                </div>
-
-                {ticketData.razorpayPaymentId && (
-                  <div className="ticket-info-item">
-                    <span className="ticket-label">RAZORPAY PAYMENT ID</span>
-                    <span className="ticket-val" style={{ color: '#00f5ff', fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                      {ticketData.razorpayPaymentId}
-                    </span>
-                  </div>
-                )}
-
-                <div className="ticket-info-item">
-                  <span className="ticket-label">REGISTRATION FEE</span>
+                  <span className="ticket-label">TOTAL PAYABLE FEE</span>
                   <span className="ticket-val fee-highlight">
-                    {ticketData.totalAmount === 0 ? 'FREE' : `₹${ticketData.totalAmount}`}
-                    {ticketData.paymentStatus === 'PAID' && ' (PAID)'}
+                    {ticketData.totalAmount === 0 ? 'FREE' : `₹${ticketData.totalAmount}`} (On-Site Desk)
                   </span>
                 </div>
               </div>
@@ -1895,93 +1338,6 @@ export default function RegistrationPage({ eventId, initialGame, onNavigate }) {
               <button type="button" className="btn btn-secondary" onClick={() => onNavigate && onNavigate('events')}>
                 EXPLORE ALL EVENTS →
               </button>
-            </div>
-          </div>
-        )}
-
-        {/* Change Event Selection Modal */}
-        {showEventModal && (
-          <div className="change-event-modal-overlay" onClick={() => setShowEventModal(false)}>
-            <div className="change-event-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="change-event-modal-header">
-                <div>
-                  <h3 className="change-event-modal-title">CHOOSE SYMPOSIUM EVENT</h3>
-                  <p className="change-event-modal-sub">
-                    Switch events freely — all your filled participant and squad details are preserved.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="change-event-close-btn"
-                  onClick={() => setShowEventModal(false)}
-                  aria-label="Close modal"
-                >
-                  <FaTimes />
-                </button>
-              </div>
-
-              <div className="change-event-filters">
-                <button
-                  type="button"
-                  className={`change-event-filter-btn ${modalCategory === 'all' ? 'active' : ''}`}
-                  onClick={() => setModalCategory('all')}
-                >
-                  ALL EVENTS ({eventsList.length})
-                </button>
-                <button
-                  type="button"
-                  className={`change-event-filter-btn ${modalCategory === 'technical' ? 'active' : ''}`}
-                  onClick={() => setModalCategory('technical')}
-                >
-                  TECHNICAL ({eventsList.filter((e) => e.category === 'technical').length})
-                </button>
-                <button
-                  type="button"
-                  className={`change-event-filter-btn ${modalCategory === 'non-technical' ? 'active' : ''}`}
-                  onClick={() => setModalCategory('non-technical')}
-                >
-                  NON-TECHNICAL ({eventsList.filter((e) => e.category === 'non-technical').length})
-                </button>
-              </div>
-
-              <div className="change-event-list">
-                {eventsList
-                  .filter((e) => modalCategory === 'all' || e.category === modalCategory)
-                  .map((ev) => {
-                    const isSelected = selectedEvent?.id === ev.id;
-                    return (
-                      <div
-                        key={ev.id}
-                        className={`change-event-item ${isSelected ? 'is-selected' : ''}`}
-                        onClick={() => handleSelectNewEvent(ev)}
-                      >
-                        <div className="change-event-item-top">
-                          <span
-                            className={`hud-badge ${
-                              ev.category === 'technical' ? 'hud-badge-tech' : 'hud-badge-nontech'
-                            }`}
-                            style={{ fontSize: '0.62rem', padding: '0.15rem 0.5rem' }}
-                          >
-                            {ev.category === 'technical' ? <FaBolt /> : <FaGamepad />}
-                            {ev.category.toUpperCase()}
-                          </span>
-                          <span className="change-event-item-fee">{ev.fee}</span>
-                        </div>
-                        <h4 className="change-event-item-name">{ev.name}</h4>
-                        <div className="change-event-item-meta">
-                          <span>{ev.teamSize || 'Individual'}</span>
-                          {isSelected ? (
-                            <span style={{ color: '#39ff88', fontWeight: '800', fontSize: '0.72rem' }}>
-                              ✓ CURRENT
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--silver)', fontSize: '0.72rem' }}>SELECT →</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
             </div>
           </div>
         )}

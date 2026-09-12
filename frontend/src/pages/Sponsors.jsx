@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { FaGlobe, FaMapMarkerAlt, FaPhoneAlt, FaUser } from 'react-icons/fa';
+import sponsors from '../data/sponsors.js';
 import { getApiUrl } from '../config/api';
 
 function SponsorCard({ sponsor, tier }) {
@@ -85,8 +86,9 @@ function SponsorCard({ sponsor, tier }) {
       }}
     >
       <div className={`sponsor-card-inner ${flipped ? 'sponsor-flipped' : ''}`}>
-        {/* Front Face: Sponsor Image/Logo + Sponsor Name Only */}
+        {/* Front Face: Premium Photo + Identity + Direct Quick Actions */}
         <div className={`sponsor-face sponsor-front ${hasLogo ? 'has-sponsor-photo' : 'no-sponsor-photo'}`}>
+          <span className="sponsor-tag">{tag}</span>
           <div className="sponsor-mark">
             {hasLogo ? (
               <img 
@@ -111,6 +113,37 @@ function SponsorCard({ sponsor, tier }) {
           </div>
           <div className="sponsor-front-bottom">
             <h4 className="sponsor-name">{sponsor.name}</h4>
+            <div className="sponsor-front-actions">
+              {cleanPhone && (
+                <a
+                  href={`tel:${cleanPhone}`}
+                  className="sponsor-front-btn sponsor-front-call"
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Call ${sponsor.name} (${sponsor.contactPhone})`}
+                  aria-label={`Call ${sponsor.name}`}
+                >
+                  <FaPhoneAlt size={10} />
+                  <span>Call</span>
+                </a>
+              )}
+              {websiteLink && (
+                <a
+                  href={websiteLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="sponsor-front-btn sponsor-front-web"
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Visit ${sponsor.name} official website (${websiteLink})`}
+                  aria-label={`Website of ${sponsor.name}`}
+                >
+                  <FaGlobe size={10} />
+                  <span>Website ↗</span>
+                </a>
+              )}
+              <span className="sponsor-flip-hint">
+                DETAILS ↻
+              </span>
+            </div>
           </div>
         </div>
 
@@ -283,17 +316,17 @@ function SponsorRow({ tier, label, items, direction }) {
 
 export default function Sponsors() {
   const sectionRef = useRef(null);
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(false);
   const [liveTiers, setLiveTiers] = useState(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) setVisible(true); },
-      { threshold: 0.05 }
+      { threshold: 0.1 }
     );
     if (sectionRef.current) observer.observe(sectionRef.current);
     return () => observer.disconnect();
-  }, [liveTiers]);
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -326,7 +359,7 @@ export default function Sponsors() {
         }
       })
       .catch((err) => {
-        console.warn('Error fetching sponsors from DB:', err);
+        console.warn('Using static sponsors fallback:', err);
       });
 
     return () => {
@@ -334,12 +367,7 @@ export default function Sponsors() {
     };
   }, []);
 
-  const tiers = liveTiers || { elite: [], premium: [], standard: [] };
-  const hasAnySponsors = (tiers.elite?.length || 0) + (tiers.premium?.length || 0) + (tiers.standard?.length || 0) > 0;
-
-  if (!hasAnySponsors) {
-    return null;
-  }
+  const tiers = liveTiers || sponsors;
 
   return (
     <section

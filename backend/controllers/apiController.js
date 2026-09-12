@@ -3,7 +3,6 @@ const path = require('path');
 const crypto = require('crypto');
 const Razorpay = require('razorpay');
 const supabase = require('../config/supabase');
-const { broadcastRegistrationUpdate } = require('../utils/websocket');
 
 let razorpayClient = null;
 function getRazorpayClient() {
@@ -246,9 +245,7 @@ exports.createPaymentOrder = async (req, res) => {
         eventName: currentEvent.name || '',
         fullName: fields.fullName || '',
         email: fields.email || '',
-        phone: fields.whatsapp || fields.phone || '',
-        whatsapp: fields.whatsapp || fields.phone || '',
-        contact: fields.contact || fields.whatsapp || fields.phone || '',
+        phone: fields.phone || '',
         game: game || ''
       }
     };
@@ -353,7 +350,7 @@ exports.verifyPaymentAndRegister = async (req, res) => {
     }
 
     const validTeamMembers = (fields.teamMembers || [])
-      .filter(m => (typeof m === 'string' ? m.trim().length > 0 : (m?.fullName ? m.fullName.trim().length > 0 : (m?.name && m.name.trim().length > 0))));
+      .filter(m => (typeof m === 'string' ? m.trim().length > 0 : (m?.name && m.name.trim().length > 0)));
 
     // 3. Insert into Supabase registrations table
     const paymentMeta = {
@@ -372,7 +369,7 @@ exports.verifyPaymentAndRegister = async (req, res) => {
       team_name: fields.teamName || null,
       full_name: fields.fullName,
       email: fields.email,
-      phone: fields.whatsapp || fields.phone,
+      phone: fields.phone,
       college: fields.college || 'C. Abdul Hakeem College of Engg & Tech',
       department: fields.department || 'CSE',
       year: fields.year || '3rd Year',
@@ -405,7 +402,7 @@ exports.verifyPaymentAndRegister = async (req, res) => {
         const membersToInsert = validTeamMembers.map((member, idx) => ({
           registration_id: registrationId,
           member_number: idx + 2,
-          member_name: (typeof member === 'string' ? member : (member.fullName || member.name || '')).trim()
+          member_name: (typeof member === 'string' ? member : (member.name || '')).trim()
         }));
 
         await supabase.from('registration_members').insert(membersToInsert);
@@ -428,15 +425,13 @@ exports.verifyPaymentAndRegister = async (req, res) => {
       college: fields.college,
       department: fields.department,
       email: fields.email,
-      phone: fields.whatsapp || fields.phone,
-      whatsapp: fields.whatsapp || fields.phone,
+      phone: fields.phone,
       year: fields.year,
       teamName: fields.teamName || null,
       isTeam: Boolean(currentEvent.isTeam),
       membersCount: 1 + validTeamMembers.length,
       participantCount: 1 + validTeamMembers.length,
-      teamMembers: validTeamMembers,
-      teamMembersList: validTeamMembers.map(m => typeof m === 'string' ? m : (m.fullName || m.name || '')),
+      teamMembersList: validTeamMembers.map(m => typeof m === 'string' ? m : m.name),
       totalFee,
       totalAmount: totalFee,
       paymentStatus: 'PAID',
@@ -466,13 +461,6 @@ exports.verifyPaymentAndRegister = async (req, res) => {
       writeRegistrations(localRegs);
     } catch (localErr) {
       console.warn('Local backup registration write error:', localErr);
-    }
-
-    // Broadcast real-time registration event to all active admin/coordinator WebSocket clients
-    try {
-      broadcastRegistrationUpdate('CREATE', ticketData);
-    } catch (wsErr) {
-      console.warn('WS broadcast error:', wsErr.message);
     }
 
     return res.json({
@@ -518,7 +506,7 @@ exports.registerEvent = async (req, res) => {
     }
 
     const validTeamMembers = (fields.teamMembers || [])
-      .filter(m => (typeof m === 'string' ? m.trim().length > 0 : (m?.fullName ? m.fullName.trim().length > 0 : (m?.name && m.name.trim().length > 0))));
+      .filter(m => (typeof m === 'string' ? m.trim().length > 0 : (m?.name && m.name.trim().length > 0)));
 
     // 1. Insert into registrations table
     const { data: regData, error: regError } = await supabase
@@ -547,7 +535,7 @@ exports.registerEvent = async (req, res) => {
       const membersToInsert = validTeamMembers.map((member, idx) => ({
         registration_id: registrationId,
         member_number: idx + 2,
-        member_name: (typeof member === 'string' ? member : (member.fullName || member.name || '')).trim()
+        member_name: (typeof member === 'string' ? member : (member.name || '')).trim()
       }));
 
       const { error: membersError } = await supabase
@@ -573,8 +561,7 @@ exports.registerEvent = async (req, res) => {
       year: fields.year,
       teamName: fields.teamName || null,
       membersCount: 1 + validTeamMembers.length,
-      teamMembers: validTeamMembers,
-      teamMembersList: validTeamMembers.map(m => typeof m === 'string' ? m : (m.fullName || m.name || '')),
+      teamMembersList: validTeamMembers.map(m => typeof m === 'string' ? m : m.name),
       totalFee,
       venue: currentEvent.venue,
       timing: currentEvent.timing,
@@ -603,13 +590,6 @@ exports.registerEvent = async (req, res) => {
       writeRegistrations(localRegs);
     } catch (localErr) {
       console.warn('Local backup registration write error:', localErr);
-    }
-
-    // Broadcast real-time registration event to all active admin/coordinator WebSocket clients
-    try {
-      broadcastRegistrationUpdate('CREATE', ticketData);
-    } catch (wsErr) {
-      console.warn('WS broadcast error:', wsErr.message);
     }
 
     res.json({

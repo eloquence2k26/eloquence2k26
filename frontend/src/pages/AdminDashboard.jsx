@@ -37,7 +37,6 @@ import {
   FaPaperPlane,
   FaThLarge,
   FaTable,
-  
   FaBars,
   FaIdCard,
   FaClipboardList,
@@ -56,11 +55,12 @@ import {
   FaCode,
   FaTerminal,
   FaStar,
-  FaLayerGroup,
-  FaCopy
+  FaLayerGroup
 } from 'react-icons/fa';
+import defaultEvents from '../data/events.js';
+import rulesData from '../data/rules.js';
 import { getEventBanner, defaultEventImages } from '../data/eventImages.js';
-import { getApiUrl, getWsUrl } from '../config/api';
+import { getApiUrl } from '../config/api';
 import ParticipantVerifier from '../components/ParticipantVerifier.jsx';
 import {
   fetchAdminHomepageCoordinators,
@@ -91,28 +91,10 @@ export default function AdminDashboard({ token, user, onLogout }) {
   const isRegCoordinator = loggedRole.includes('registration') || loggedRole.includes('reg_coord') || loggedRole === 'registration coordinator';
   const isLeadCoordinator = loggedRole.includes('lead') || loggedRole === 'lead coordinator' || loggedRole === 'lead_coordinator';
 
-  // Persist active tab across browser refreshes
   const [activeTab, setActiveTab] = useState(() => {
-    try {
-      const saved = localStorage.getItem('admin_active_tab');
-      if (saved) {
-        if (!isAdminOrSuper && (saved === 'manage-users' || saved === 'manage-roles')) {
-          return isRegCoordinator ? 'registration' : 'dashboard';
-        }
-        return saved;
-      }
-    } catch (e) {}
     if (isRegCoordinator) return 'registration';
     return 'dashboard';
   });
-
-  useEffect(() => {
-    if (activeTab) {
-      try {
-        localStorage.setItem('admin_active_tab', activeTab);
-      } catch (e) {}
-    }
-  }, [activeTab]);
 
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -137,7 +119,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
   }, [activeTab, isAdminOrSuper, isRegCoordinator]);
 
   // ==================== EVENTS STATE ====================
-  const [eventsList, setEventsList] = useState([]);
+  const [eventsList, setEventsList] = useState(defaultEvents);
   const [eventFilter, setEventFilter] = useState('all');
   const [eventSearch, setEventSearch] = useState('');
   const [isEventEditModalOpen, setIsEventEditModalOpen] = useState(false);
@@ -185,20 +167,19 @@ export default function AdminDashboard({ token, user, onLogout }) {
   };
 
   const getTeamMembers = (r) => {
-    if (!r) return [];
     if (Array.isArray(r.registration_members) && r.registration_members.length > 0) {
-      return r.registration_members.map(m => typeof m === 'string' ? m : (m.member_name || m.name || m.fullName || ''));
+      return r.registration_members.map(m => m.member_name || m.name || m);
     }
     if (Array.isArray(r.teamMembersList) && r.teamMembersList.length > 0) {
-      return r.teamMembersList.map(m => typeof m === 'string' ? m : (m.fullName || m.name || ''));
+      return r.teamMembersList;
     }
     if (Array.isArray(r.teamMembers) && r.teamMembers.length > 0) {
-      return r.teamMembers.map(m => typeof m === 'string' ? m : (m.fullName || m.name || ''));
+      return r.teamMembers;
     }
     if (typeof r.team_members === 'string') {
       try {
         const parsed = JSON.parse(r.team_members);
-        if (Array.isArray(parsed)) return parsed.map(m => typeof m === 'string' ? m : (m.fullName || m.name || m));
+        if (Array.isArray(parsed)) return parsed.map(m => typeof m === 'string' ? m : (m.name || m));
       } catch (e) {
         if (r.team_members.trim()) return [r.team_members.trim()];
       }
@@ -826,80 +807,6 @@ export default function AdminDashboard({ token, user, onLogout }) {
       .catch(err => console.warn('Error fetching registrations list:', err));
   };
 
-  // ==================== REAL-TIME REGISTRATION WEBSOCKET ====================
-  const [wsConnected, setWsConnected] = useState(false);
-
-  useEffect(() => {
-    let ws = null;
-    let reconnectTimeout = null;
-    let isMounted = true;
-
-    const connectWS = () => {
-      try {
-        const wsUrl = getWsUrl('/ws/registrations');
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-          if (!isMounted) return;
-          setWsConnected(true);
-        };
-
-        ws.onmessage = (event) => {
-          if (!isMounted) return;
-          try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'REGISTRATION_UPDATE') {
-              // Automatically refresh registrations and live analytics
-              fetchRegistrations();
-              fetchDashboardData();
-
-              const action = msg.action;
-              const rData = msg.data || {};
-              const ticket = rData.ticketCode || rData.ticket_code || rData.registrationId || rData.id || '';
-              const name = rData.fullName || rData.leadName || rData.full_name || 'Participant';
-              const evt = rData.eventName || 'Event';
-
-              if (action === 'CREATE') {
-                toast.success(`⚡ Live Registration: ${name} (${evt})!`, { icon: '🔔', duration: 5000 });
-              } else if (action === 'VERIFY') {
-                toast.success(`✅ Live Update: Registration #${ticket} verified!`, { duration: 4000 });
-              } else if (action === 'DELETE') {
-                toast(`🗑️ Live Update: Registration #${ticket} deleted`, { icon: 'ℹ️', duration: 4000 });
-              }
-            }
-          } catch (e) {
-            console.warn('WS message parse error:', e);
-          }
-        };
-
-        ws.onclose = () => {
-          if (!isMounted) return;
-          setWsConnected(false);
-          reconnectTimeout = setTimeout(connectWS, 3000);
-        };
-
-        ws.onerror = () => {
-          if (!isMounted) return;
-          setWsConnected(false);
-        };
-      } catch (err) {
-        if (isMounted) {
-          reconnectTimeout = setTimeout(connectWS, 5000);
-        }
-      }
-    };
-
-    connectWS();
-
-    return () => {
-      isMounted = false;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (ws) {
-        try { ws.close(); } catch (e) {}
-      }
-    };
-  }, []);
-
   // ==================== INITIAL DATA FETCH ====================
   useEffect(() => {
     fetchDashboardData();
@@ -1041,12 +948,13 @@ export default function AdminDashboard({ token, user, onLogout }) {
     fetch(getApiUrl('/api/admin/events'), { headers: { 'Authorization': `Bearer ${token}` } })
       .then(res => res.json())
       .then(result => {
-        if (result.success && Array.isArray(result.data)) {
+        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
           setEventsList(result.data);
         }
       })
-      .catch((err) => {
-        console.error('Error fetching admin events from DB:', err);
+      .catch(() => {
+        // Fallback to defaultEvents if API is unreachable
+        setEventsList(defaultEvents);
       });
   };
 
@@ -1299,7 +1207,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
 
     const existingRules = (Array.isArray(eventItem.rules) && eventItem.rules.length > 0)
       ? eventItem.rules
-      : [];
+      : (rulesData[eventItem.id]?.rules || []);
     const initialRules = existingRules.length > 0 ? [...existingRules] : [''];
     setEventRules(initialRules);
     setBulkRulesText(initialRules.join('\n'));
@@ -2767,7 +2675,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
                                   onClick={(e) => { e.stopPropagation(); handleOpenEditEventModal(evt); }}
                                   title={isLeadCoordinator ? "Click to view rules" : "Click to view and edit rules"}
                                 >
-                                  <FaListOl size={8} /> {((Array.isArray(evt.rules) && evt.rules.length) || 0)} Rules
+                                  <FaListOl size={8} /> {((Array.isArray(evt.rules) && evt.rules.length) || rulesData[evt.id]?.rules?.length || 0)} Rules
                                 </span>
                               </div>
                             </div>
@@ -4287,35 +4195,10 @@ export default function AdminDashboard({ token, user, onLogout }) {
 
                             {/* Registration Mode */}
                             <td style={S.td}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
-                                <span style={isOnline ? S.badgeOnline : S.badgeOffline}>
-                                  {isOnline ? <FaGlobe size={11} /> : <FaCashRegister size={11} />}
-                                  <span>{isOnline ? 'Online' : 'Offline Desk'}</span>
-                                </span>
-                                {isOnline && (
-                                  <span style={{
-                                    fontSize: '0.72rem',
-                                    fontWeight: '700',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px',
-                                    background: (reg.payment_method === 'RAZORPAY_UPI' || reg.paymentMethod === 'RAZORPAY_UPI')
-                                      ? (isDark ? 'rgba(168, 85, 247, 0.2)' : '#f3e8ff')
-                                      : (isDark ? 'rgba(59, 130, 246, 0.2)' : '#eff6ff'),
-                                    color: (reg.payment_method === 'RAZORPAY_UPI' || reg.paymentMethod === 'RAZORPAY_UPI')
-                                      ? (isDark ? '#d8b4fe' : '#7e22ce')
-                                      : (isDark ? '#93c5fd' : '#1d4ed8'),
-                                    border: (reg.payment_method === 'RAZORPAY_UPI' || reg.paymentMethod === 'RAZORPAY_UPI')
-                                      ? '1px solid rgba(168, 85, 247, 0.3)'
-                                      : '1px solid rgba(59, 130, 246, 0.3)'
-                                  }}>
-                                    {(reg.payment_method === 'RAZORPAY_UPI' || reg.paymentMethod === 'RAZORPAY_UPI')
-                                      ? '⚡ UPI (Razorpay)'
-                                      : (reg.payment_method === 'RAZORPAY' || reg.paymentMethod === 'RAZORPAY' || reg.razorpay_payment_id || reg.razorpayPaymentId)
-                                      ? '💳 Cards (Razorpay)'
-                                      : '🌐 Web Gateway'}
-                                  </span>
-                                )}
-                              </div>
+                              <span style={isOnline ? S.badgeOnline : S.badgeOffline}>
+                                {isOnline ? <FaGlobe size={11} /> : <FaCashRegister size={11} />}
+                                <span>{isOnline ? 'Online' : 'Offline Desk'}</span>
+                              </span>
                             </td>
 
                             {/* Fee & Payment Status */}
@@ -4324,48 +4207,10 @@ export default function AdminDashboard({ token, user, onLogout }) {
                                 <span style={{ fontWeight: '700', color: '#10b981', fontSize: '0.95rem' }}>
                                   ₹{feeAmt}
                                 </span>
-                                {((reg.payment_status || reg.paymentStatus || '').toLowerCase() === 'paid') ? (
-                                  <span style={S.badgePaid}>
-                                    <FaCheck size={8} style={{ marginRight: '3px' }} />
-                                    <span>PAID</span>
-                                  </span>
-                                ) : (
-                                  <span style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    padding: '0.2rem 0.5rem',
-                                    borderRadius: '999px',
-                                    fontSize: '0.72rem',
-                                    fontWeight: '700',
-                                    background: isDark ? 'rgba(234, 179, 8, 0.15)' : '#fef9c3',
-                                    color: isDark ? '#fde047' : '#a16207',
-                                    border: isDark ? '1px solid rgba(234, 179, 8, 0.3)' : '1px solid #fef08a'
-                                  }}>
-                                    <span>PENDING</span>
-                                  </span>
-                                )}
-                                {(reg.razorpay_payment_id || reg.razorpayPaymentId) && (
-                                  <span 
-                                    style={{
-                                      fontSize: '0.68rem',
-                                      fontFamily: 'monospace',
-                                      color: isDark ? '#93c5fd' : '#2563eb',
-                                      cursor: 'pointer',
-                                      background: isDark ? '#1e293b' : '#f1f5f9',
-                                      padding: '1px 5px',
-                                      borderRadius: '3px',
-                                      fontWeight: '600'
-                                    }}
-                                    title="Click to copy Razorpay Payment ID"
-                                    onClick={() => {
-                                      const pid = reg.razorpay_payment_id || reg.razorpayPaymentId;
-                                      navigator.clipboard.writeText(pid);
-                                      toast.success(`Copied Payment ID: ${pid}`);
-                                    }}
-                                  >
-                                    ID: {(reg.razorpay_payment_id || reg.razorpayPaymentId).slice(0, 11)}...
-                                  </span>
-                                )}
+                                <span style={S.badgePaid}>
+                                  <FaCheck size={8} style={{ marginRight: '3px' }} />
+                                  <span>{reg.payment_status || reg.paymentStatus || 'CONFIRMED'}</span>
+                                </span>
                               </div>
                             </td>
 
@@ -6430,11 +6275,7 @@ export default function AdminDashboard({ token, user, onLogout }) {
                   <div>
                     <div style={S.label}>Payment Method</div>
                     <div style={{ fontWeight: '600', fontSize: '0.92rem', color: isDark ? '#cbd5e1' : '#334155', marginTop: '3px' }}>
-                      {(selectedRegDetails.payment_method === 'RAZORPAY_UPI' || selectedRegDetails.paymentMethod === 'RAZORPAY_UPI')
-                        ? '⚡ UPI (Razorpay)'
-                        : (selectedRegDetails.payment_method === 'RAZORPAY' || selectedRegDetails.paymentMethod === 'RAZORPAY' || selectedRegDetails.razorpay_payment_id || selectedRegDetails.razorpayPaymentId)
-                        ? '💳 Online Cards / Netbanking (Razorpay)'
-                        : isOnlineRecord(selectedRegDetails) ? 'Online Web Gateway' : 'On-Site Registration Desk (Cash)'}
+                      {isOnlineRecord(selectedRegDetails) ? 'Online Website Portal (Gateway/UPI)' : 'On-Site Registration Desk (Cash/Manual)'}
                     </div>
                   </div>
                   <div>
@@ -6451,64 +6292,6 @@ export default function AdminDashboard({ token, user, onLogout }) {
                       {selectedRegDetails.event_id || selectedRegDetails.eventId || 'N/A'}
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Payment & Razorpay Transaction Audit */}
-              <div>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.9rem', fontWeight: '700', color: isDark ? '#34d399' : '#059669', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FaCheckCircle size={14} />
-                  Payment & Transaction Audit
-                </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', background: isDark ? '#064e3b15' : '#f0fdf4', padding: '1.2rem', borderRadius: '12px', border: isDark ? '1px solid #05966940' : '1px solid #bbf7d0' }}>
-                  <div>
-                    <div style={S.label}>Payment Status</div>
-                    <div style={{ fontWeight: '800', fontSize: '0.95rem', color: ((selectedRegDetails.payment_status || selectedRegDetails.paymentStatus || '').toLowerCase() === 'paid') ? '#10b981' : '#f59e0b', marginTop: '3px' }}>
-                      {((selectedRegDetails.payment_status || selectedRegDetails.paymentStatus || '').toLowerCase() === 'paid') ? '✓ PAID / VERIFIED' : '⏳ PENDING'}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={S.label}>Payment Provider / Mode</div>
-                    <div style={{ fontWeight: '700', fontSize: '0.95rem', color: isDark ? '#f9fafb' : '#0f172a', marginTop: '3px' }}>
-                      {(selectedRegDetails.payment_method === 'RAZORPAY_UPI' || selectedRegDetails.paymentMethod === 'RAZORPAY_UPI')
-                        ? '⚡ UPI (Razorpay)'
-                        : (selectedRegDetails.payment_method === 'RAZORPAY' || selectedRegDetails.paymentMethod === 'RAZORPAY' || selectedRegDetails.razorpay_payment_id || selectedRegDetails.razorpayPaymentId)
-                        ? '💳 Cards / Netbanking (Razorpay)'
-                        : isOnlineRecord(selectedRegDetails) ? '🌐 Online Portal' : '💵 On-Site Desk'}
-                    </div>
-                  </div>
-                  {(selectedRegDetails.razorpay_payment_id || selectedRegDetails.razorpayPaymentId) && (
-                    <div>
-                      <div style={S.label}>Razorpay Payment ID</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px' }}>
-                        <code style={{ background: isDark ? '#111827' : '#ffffff', padding: '4px 8px', borderRadius: '6px', fontSize: '0.85rem', color: isDark ? '#93c5fd' : '#2563eb', border: isDark ? '1px solid #374151' : '1px solid #cbd5e1', fontWeight: '700' }}>
-                          {selectedRegDetails.razorpay_payment_id || selectedRegDetails.razorpayPaymentId}
-                        </code>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const pid = selectedRegDetails.razorpay_payment_id || selectedRegDetails.razorpayPaymentId;
-                            navigator.clipboard.writeText(pid);
-                            toast.success(`Copied Razorpay Payment ID: ${pid}`);
-                          }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: isDark ? '#93c5fd' : '#2563eb', padding: '2px' }}
-                          title="Copy Razorpay Payment ID"
-                        >
-                          <FaCopy size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {(selectedRegDetails.razorpay_order_id || selectedRegDetails.razorpayOrderId) && (
-                    <div>
-                      <div style={S.label}>Razorpay Order ID</div>
-                      <div style={{ marginTop: '3px' }}>
-                        <code style={{ background: isDark ? '#111827' : '#ffffff', padding: '4px 8px', borderRadius: '6px', fontSize: '0.85rem', color: isDark ? '#9ca3af' : '#64748b', border: isDark ? '1px solid #374151' : '1px solid #cbd5e1' }}>
-                          {selectedRegDetails.razorpay_order_id || selectedRegDetails.razorpayOrderId}
-                        </code>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
 

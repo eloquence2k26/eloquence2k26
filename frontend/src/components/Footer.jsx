@@ -1,25 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { FaBolt, FaGamepad, FaCompass } from 'react-icons/fa';
 import logoImg from '../assets/logo.png';
-import { getApiUrl } from '../config/api';
+import events from '../data/events.js';
 
 export default function Footer({ onNavigate }) {
-  const [eventsList, setEventsList] = useState([]);
   const [clickCount, setClickCount] = useState(0);
   const timerRef = useRef(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    fetch(getApiUrl('/api/events'))
-      .then((res) => res.json())
-      .then((result) => {
-        if (isMounted && result.success && Array.isArray(result.data)) {
-          setEventsList(result.data);
-        }
-      })
-      .catch(() => {});
-    return () => { isMounted = false; };
-  }, []);
 
   const handleTripleClick = () => {
     setClickCount((prev) => {
@@ -48,8 +34,8 @@ export default function Footer({ onNavigate }) {
     }
   };
 
-  const techEvents = eventsList.filter((e) => e.category === 'technical');
-  const nonTechEvents = eventsList.filter((e) => e.category === 'non-technical');
+  const techEvents = events.filter((e) => e.category === 'technical');
+  const nonTechEvents = events.filter((e) => e.category === 'non-technical');
 
   return (
     <footer className="footer">

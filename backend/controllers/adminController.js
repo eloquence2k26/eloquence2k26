@@ -2,7 +2,6 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const path = require('path');
 const supabase = require('../config/supabase');
-const { broadcastRegistrationUpdate } = require('../utils/websocket');
 
 const usersFilePath = path.join(__dirname, '../data/users.json');
 const rolesFilePath = path.join(__dirname, '../data/roles.json');
@@ -1623,14 +1622,6 @@ exports.deleteRegistration = async (req, res) => {
     if (registrations.length !== initialLen) {
       saveRegistrationsData(registrations);
     }
-
-    // Broadcast real-time deletion event
-    try {
-      broadcastRegistrationUpdate('DELETE', { id, ticket_code: id });
-    } catch (wsErr) {
-      console.warn('WS Broadcast delete error:', wsErr.message);
-    }
-
     return res.json({ success: true, message: 'Registration deleted successfully' });
   } catch (err) {
     console.error('Error in deleteRegistration:', err);
@@ -1676,7 +1667,7 @@ exports.verifyRegistration = async (req, res) => {
           is_verified: Boolean(isVerified),
           isVerified: Boolean(isVerified),
           verified_at: verifiedAt,
-          verified_at: verifiedAt,
+          verifiedAt: verifiedAt,
           verified_by: isVerified ? verifiedBy : null,
           verifiedBy: isVerified ? verifiedBy : null
         };
@@ -1684,22 +1675,6 @@ exports.verifyRegistration = async (req, res) => {
       }
       return r;
     });
-
-    const broadcastPayload = updatedRecord || {
-      id,
-      ticket_code: id,
-      is_verified: Boolean(isVerified),
-      isVerified: Boolean(isVerified),
-      verified_at: verifiedAt,
-      verified_by: isVerified ? verifiedBy : null
-    };
-
-    // Broadcast real-time verification event
-    try {
-      broadcastRegistrationUpdate('VERIFY', broadcastPayload);
-    } catch (wsErr) {
-      console.warn('WS Broadcast verify error:', wsErr.message);
-    }
 
     if (updatedRecord) {
       saveRegistrationsData(registrations);
@@ -1714,7 +1689,13 @@ exports.verifyRegistration = async (req, res) => {
     return res.json({
       success: true,
       message: isVerified ? 'Participant verified and confirmed successfully!' : 'Participant verification reset',
-      data: broadcastPayload
+      data: {
+        id,
+        is_verified: Boolean(isVerified),
+        isVerified: Boolean(isVerified),
+        verified_at: verifiedAt,
+        verified_by: isVerified ? verifiedBy : null
+      }
     });
   } catch (err) {
     console.error('Error in verifyRegistration:', err);

@@ -8,80 +8,79 @@ import {
   FaMoneyBillWave,
   FaUsers,
   FaListOl,
-  FaHeadset,
-  FaSpinner,
-  FaBolt
+  FaHeadset
 } from 'react-icons/fa';
 import { motion } from 'framer-motion';
+import events from '../data/events.js';
+import rulesData from '../data/rules.js';
 import { getApiUrl } from '../config/api';
+import coordinatorsData from '../data/coordinator.js';
 
 export default function EventRulesPage({ eventId, from, categoryFilter, onNavigate }) {
-  const [eventsList, setEventsList] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [liveCoordinators, setLiveCoordinators] = useState([]);
+  const [eventsList, setEventsList] = useState(events);
+  const event = eventsList.find((e) => e.id === eventId || e.id?.toLowerCase() === eventId?.toLowerCase()) || eventsList[0] || events[0];
+
+  const rulesList = (Array.isArray(event.rules) && event.rules.length > 0)
+    ? event.rules
+    : (rulesData[event.id]?.rules || []);
+
+  const [liveCoordinators, setLiveCoordinators] = useState(() => {
+    return event ? (coordinatorsData[event.id]?.coordinators || []) : [];
+  });
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
     fetch(getApiUrl('/api/events'))
       .then((res) => res.json())
       .then((result) => {
-        if (isMounted && result.success && Array.isArray(result.data)) {
+        if (isMounted && result.success && Array.isArray(result.data) && result.data.length > 0) {
           setEventsList(result.data);
         }
       })
-      .catch((err) => {
-        console.error('Failed to load events from DB:', err);
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
+      .catch(() => {});
     return () => { isMounted = false; };
   }, [eventId]);
-
-  const event = eventsList.find((e) => e.id === eventId || e.id?.toLowerCase() === eventId?.toLowerCase()) || (eventsList.length > 0 ? eventsList[0] : null);
 
   useEffect(() => {
     if (!event?.id) return;
     let isMounted = true;
+    const staticFallback = coordinatorsData[event.id]?.coordinators || [];
     fetch(getApiUrl(`/api/coordinators/event/${encodeURIComponent(event.id)}`))
       .then((res) => res.json())
       .then((result) => {
         if (!isMounted) return;
-        if (result.success && Array.isArray(result.data)) {
+        if (result.success && Array.isArray(result.data) && result.data.length > 0) {
           setLiveCoordinators(result.data);
         } else {
-          setLiveCoordinators([]);
+          setLiveCoordinators(staticFallback);
         }
       })
       .catch(() => {
-        if (isMounted) setLiveCoordinators([]);
+        if (isMounted) setLiveCoordinators(staticFallback);
       });
     return () => { isMounted = false; };
   }, [event?.id]);
 
-  const rulesList = (event && Array.isArray(event.rules) && event.rules.length > 0)
-    ? event.rules
-    : [];
-
   const coordsList = (Array.isArray(liveCoordinators) && liveCoordinators.length > 0)
     ? liveCoordinators
-    : (event && Array.isArray(event.coordinators) && event.coordinators.length > 0 ? event.coordinators : []);
+    : (Array.isArray(event.coordinators) && event.coordinators.length > 0
+        ? event.coordinators
+        : (coordinatorsData[event.id]?.coordinators || []));
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [eventId]);
 
-  const isEsports = event && (event.id === 'nontech-05' || event.name?.toLowerCase().includes('gaming') || event.name?.toLowerCase().includes('battle of champions'));
+  const isEsports = event.id === 'nontech-05';
 
   const handleRegister = () => {
-    if (onNavigate && event) {
+    if (onNavigate) {
       onNavigate('register', event.id);
     }
   };
 
   const handleRegisterGame = (game) => {
-    if (onNavigate && event) {
+    if (onNavigate) {
       onNavigate('register', { eventId: event.id, game });
     }
   };
@@ -102,79 +101,6 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
       onNavigate('events');
     }
   };
-
-  if (loading) {
-    return (
-      <div className="event-rules-page" style={{ minHeight: '75vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          className="events-loading-container"
-          style={{ padding: '3rem 1.5rem', maxWidth: '480px' }}
-        >
-          {/* High-tech cyberpunk orbital radar loader */}
-          <div className="cyber-loader-wrap">
-            <motion.div
-              className="cyber-orbit-ring-outer"
-              animate={{ rotate: 360 }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
-            />
-            <motion.div
-              className="cyber-orbit-ring-inner"
-              animate={{ rotate: -360 }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
-            />
-            <motion.div
-              className="cyber-loader-core"
-              animate={{
-                scale: [0.92, 1.08, 0.92],
-                boxShadow: [
-                  '0 0 15px rgba(57, 255, 136, 0.4)',
-                  '0 0 28px rgba(0, 240, 255, 0.75)',
-                  '0 0 15px rgba(57, 255, 136, 0.4)',
-                ],
-              }}
-              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <FaBolt className="cyber-loader-icon" />
-            </motion.div>
-          </div>
-
-          <div className="cyber-loading-meta">
-            <h4 className="cyber-loading-title">LOADING EVENT RULES</h4>
-            <p className="cyber-loading-subtext">
-              Please wait while we fetch the rules and details
-              <span className="cyber-loading-dots">
-                <span>.</span><span>.</span><span>.</span>
-              </span>
-            </p>
-            <div className="cyber-loading-beam-wrap">
-              <motion.div
-                className="cyber-loading-beam"
-                animate={{ x: ['-100%', '100%'] }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-              />
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  if (!event) {
-    return (
-      <div className="event-rules-page" style={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', maxWidth: '400px', padding: '2rem' }}>
-          <h2 style={{ color: '#ef4444', marginBottom: '0.5rem' }}>Event Not Found</h2>
-          <p style={{ color: '#94a3b8', marginBottom: '1.5rem' }}>This competition does not exist or hasn't been added to the database yet.</p>
-          <button className="btn btn-primary" onClick={handleBackToEvents}>
-            <FaArrowLeft style={{ marginRight: '6px' }} /> Return to Events
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="event-rules-page">

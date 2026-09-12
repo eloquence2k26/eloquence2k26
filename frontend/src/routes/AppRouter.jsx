@@ -6,6 +6,7 @@ import EventsPage from '../pages/EventsPage.jsx';
 import EventRulesPage from '../pages/EventRulesPage.jsx';
 import RegistrationPage from '../pages/RegistrationPage.jsx';
 import Admin from '../pages/Admin.jsx';
+import events from '../data/events.js';
 
 function parseHash(hash) {
   if (!hash || hash === '#' || hash === '#/') {
@@ -22,19 +23,20 @@ function parseHash(hash) {
 
   if (pathPart.startsWith('#/register/') || pathPart === '#/register' || pathPart.startsWith('#register')) {
     const parts = pathPart.split('/');
-    const id = parts[2] ? parts[2].trim() : (params.get('event') || null);
+    const id = parts[2];
     let game = gameParam;
     if (!game && parts[3]) {
       const g = parts[3].toLowerCase();
       if (g.includes('bgmi')) game = 'BGMI';
       else if (g.includes('free') || g.includes('fire')) game = 'FREE FIRE';
     }
-    if (!id) {
+    const found = id ? events.find((e) => e.id === id || e.id.toLowerCase() === id?.toLowerCase()) : null;
+    if (!found) {
       return { page: 'events', eventId: null, sectionId: null, from, categoryFilter, game: null };
     }
     return {
       page: 'register',
-      eventId: id,
+      eventId: found.id,
       sectionId: null,
       from,
       categoryFilter,
@@ -43,10 +45,11 @@ function parseHash(hash) {
   }
   if (pathPart.startsWith('#/events/') || pathPart.startsWith('#/event/')) {
     const parts = pathPart.split('/');
-    const id = parts[2] ? parts[2].trim() : null;
+    const id = parts[2];
+    const found = events.find((e) => e.id === id || e.id.toLowerCase() === id?.toLowerCase());
     return {
       page: 'event-rules',
-      eventId: id,
+      eventId: found ? found.id : events[0].id,
       sectionId: null,
       from,
       categoryFilter,
@@ -68,15 +71,7 @@ export default function AppRouter() {
   const [hasPlayedIntro, setHasPlayedIntro] = useState(false);
   const checkIsAdminOrCoordinator = () => {
     const path = window.location.pathname;
-    const hash = window.location.hash || '';
-    return (
-      path.startsWith('/admin') ||
-      path.startsWith('/coordinators') ||
-      hash.startsWith('#/admin') ||
-      hash.startsWith('#admin') ||
-      hash.startsWith('#/coordinators') ||
-      hash.startsWith('#coordinators')
-    );
+    return path.startsWith('/admin') || path.startsWith('/coordinators');
   };
 
   const [isAdminRoute, setIsAdminRoute] = useState(checkIsAdminOrCoordinator);
@@ -84,10 +79,9 @@ export default function AppRouter() {
   useEffect(() => {
     const handleHashChange = () => {
       setRoute(parseHash(window.location.hash));
-      setIsAdminRoute(checkIsAdminOrCoordinator());
     };
 
-    // Popstate listener to detect path changes for admin & coordinators
+    // Minimal popstate listener to detect path changes for admin & coordinators
     const handlePopState = () => {
       setIsAdminRoute(checkIsAdminOrCoordinator());
     };
@@ -160,14 +154,6 @@ export default function AppRouter() {
         window.history.pushState({ from: null }, '', '#/events');
       } catch (e) {}
       window.location.hash = '/events';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (page === 'admin') {
-      setIsAdminRoute(true);
-      try {
-        window.history.pushState({}, '', '/admin');
-      } catch (e) {
-        window.location.hash = '/admin';
-      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       const sectionId = typeof extra === 'string' ? extra : null;
