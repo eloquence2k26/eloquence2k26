@@ -4,6 +4,23 @@ const apiController = require('../controllers/apiController');
 const adminController = require('../controllers/adminController');
 
 // ── Public Routes ─────────────────────────────────────────────────────────────
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    name: "ELOQUENCE '26 Backend API",
+    status: "Online & Running",
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/api/health',
+      status: '/api/status',
+      events: '/api/events',
+      sponsors: '/api/sponsors',
+      coordinators: '/api/coordinators',
+      registrations: '/api/registrations',
+      winners: '/api/winners'
+    }
+  });
+});
 router.get('/health', apiController.getHealth);
 router.get('/status', apiController.getStatus);
 router.post('/register', apiController.registerEvent);

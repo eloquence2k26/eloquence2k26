@@ -30,6 +30,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
+// Root health & status shortcuts
+app.get('/health', (req, res) => res.redirect('/api/health'));
+app.get('/status', (req, res) => res.redirect('/api/status'));
+
 // Frontend static build serving (Unified deployment on Render)
 const frontendDist = path.join(__dirname, '../frontend/dist');
 if (fs.existsSync(frontendDist)) {
@@ -48,14 +52,30 @@ if (fs.existsSync(frontendDist)) {
     res.json({
       name: "ELOQUENCE '26 Backend API",
       status: "Running",
-      healthCheck: "/api/health"
+      healthCheck: "/api/health",
+      apiBase: "/api"
     });
   });
 }
 
 // 404 handler for unmatched API requests or invalid paths
 app.use((req, res) => {
-  res.status(404).json({ success: false, message: 'API endpoint or resource not found' });
+  res.status(404).json({
+    success: false,
+    message: `API endpoint or resource '${req.method} ${req.originalUrl}' not found`,
+    requestedUrl: req.originalUrl,
+    method: req.method,
+    availableEndpoints: [
+      '/api/health',
+      '/api/status',
+      '/api/events',
+      '/api/sponsors',
+      '/api/coordinators',
+      '/api/registrations',
+      '/api/winners',
+      '/api/admin/login'
+    ]
+  });
 });
 
 // Start Server
