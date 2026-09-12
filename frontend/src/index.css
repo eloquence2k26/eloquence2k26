@@ -3478,6 +3478,29 @@ img {
   }
 }
 
+@media (max-width: 768px) {
+  .footer-brand {
+    align-items: center;
+    text-align: center;
+  }
+
+  .footer-logo-container {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .footer-logo-img {
+    margin: 0 auto;
+    display: block;
+  }
+
+  .footer-desc {
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+  }
+}
+
 @media (max-width: 600px) {
   .footer-inner {
     grid-template-columns: 1fr;
