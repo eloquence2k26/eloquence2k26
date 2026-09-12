@@ -1147,7 +1147,7 @@ img {
   gap: 0.5rem;
 }
 
-.view-rules-direct-btn {
+.view-rules-dropdown-trigger {
   background: rgba(57, 255, 136, 0.08);
   border: 1px solid rgba(57, 255, 136, 0.28);
   color: #39FF88;
@@ -1160,21 +1160,106 @@ img {
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  text-decoration: none;
+  gap: 0.38rem;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
 }
 
-.view-rules-direct-btn:hover {
-  background: rgba(57, 255, 136, 0.2);
+.view-rules-dropdown-trigger:hover,
+.view-rules-dropdown-trigger.active {
+  background: rgba(57, 255, 136, 0.22);
   border-color: #39FF88;
   color: #ffffff;
-  box-shadow: 0 0 14px rgba(57, 255, 136, 0.35);
-  transform: translateX(2px);
+  box-shadow: 0 0 12px rgba(57, 255, 136, 0.35);
 }
 
-.view-rules-direct-btn:active {
-  transform: scale(0.98);
+.view-rules-dropdown-trigger:active {
+  transform: scale(0.97);
+}
+
+.event-rules-dropdown-drawer {
+  margin-top: 0.85rem;
+  background: linear-gradient(165deg, rgba(8, 24, 15, 0.96) 0%, rgba(3, 12, 7, 0.98) 100%);
+  border: 1px solid rgba(57, 255, 136, 0.28);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.75), inset 0 0 15px rgba(57, 255, 136, 0.05);
+  animation: slideDownRules 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideDownRules {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rules-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.75);
+  text-transform: uppercase;
+  margin-bottom: 0.55rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(57, 255, 136, 0.15);
+}
+
+.rules-dropdown-full-link {
+  background: none;
+  border: none;
+  color: #39FF88;
+  font-family: var(--font-display);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.rules-dropdown-full-link:hover {
+  color: #ffffff;
+  text-shadow: 0 0 8px #39FF88;
+  text-decoration: underline;
+}
+
+.rules-dropdown-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.rules-dropdown-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: rgba(230, 245, 235, 0.9);
+}
+
+.rules-dropdown-num {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #39FF88;
+  flex-shrink: 0;
+  min-width: 16px;
 }
 
 
@@ -5700,6 +5785,15 @@ img {
   justify-content: center;
 }
 
+.rules-category-tags-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.65rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .rules-category-tag {
   font-family: var(--font-display);
   font-size: 0.72rem;
@@ -5707,13 +5801,58 @@ img {
   letter-spacing: 0.18em;
   color: #39FF88;
   text-transform: uppercase;
-  margin-bottom: 0.65rem;
   display: inline-block;
   background: rgba(57, 255, 136, 0.1);
   padding: 0.35rem 0.95rem;
   border-radius: 999px;
   border: 1px solid rgba(57, 255, 136, 0.3);
   box-shadow: 0 0 16px rgba(57, 255, 136, 0.16);
+}
+
+.rules-sub-tag-badge {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.rules-highlights-box {
+  background: rgba(8, 22, 14, 0.82);
+  border: 1.5px solid rgba(57, 255, 136, 0.22);
+  border-radius: 14px;
+  padding: 1.15rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65);
+}
+
+.rules-highlights-title {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #39FF88;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  text-transform: uppercase;
+}
+
+.rules-highlight-bolt-icon {
+  font-size: 0.78rem;
+  color: #39FF88;
+}
+
+.rules-rounds-card {
+  padding: 1.6rem 2rem;
 }
 
 .rules-clean-main-title {

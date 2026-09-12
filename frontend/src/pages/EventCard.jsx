@@ -1,5 +1,7 @@
-import { FaArrowRight } from 'react-icons/fa';
+import { useState } from 'react';
+import { FaArrowRight, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import { getEventBanner } from '../data/eventImages.js';
+import rulesData from '../data/rules.js';
 
 function getEventIllustration(event) {
   const bannerSrc = getEventBanner(event);
@@ -60,10 +62,17 @@ function getEventIcon(id) {
 }
 
 export default function EventCard({ event, onRegister, onViewRules }) {
-  const handleViewRules = (e) => {
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
+
+  const handleToggleRules = (e) => {
+    if (e) e.stopPropagation();
+    setIsRulesOpen((prev) => !prev);
+  };
+
+  const handleFullRulesClick = (e) => {
     if (e) e.stopPropagation();
     if (onViewRules) {
-      onViewRules(event);
+      onViewRules(event.id || event);
     } else if (onRegister) {
       onRegister(event.id || event);
     }
@@ -74,11 +83,17 @@ export default function EventCard({ event, onRegister, onViewRules }) {
     if (onRegister) {
       onRegister(event.id || event);
     } else if (onViewRules) {
-      onViewRules(event);
+      onViewRules(event.id || event);
     }
   };
 
   const isTech = event.category === 'technical';
+  const eventRules = (Array.isArray(event.rules) && event.rules.length > 0)
+    ? event.rules
+    : (rulesData[event.id]?.rules || [
+        'Participants must report 15 minutes before scheduled time with college ID.',
+        'Decision of the judging panel and event coordinators is final and binding.'
+      ]);
 
   return (
     <div className={`event-poster-card ${isTech ? 'poster-tech' : 'poster-nontech'}`}>
@@ -114,13 +129,54 @@ export default function EventCard({ event, onRegister, onViewRules }) {
             </div>
             <button
               type="button"
-              className="view-rules-direct-btn"
-              onClick={handleViewRules}
-              title={`View complete rules and guidelines for ${event.name}`}
+              className={`view-rules-dropdown-trigger ${isRulesOpen ? 'active' : ''}`}
+              onClick={handleToggleRules}
+              aria-expanded={isRulesOpen}
+              title={isRulesOpen ? 'Collapse rules' : 'Expand quick rules preview'}
             >
-              View Rules <FaArrowRight style={{ fontSize: '0.62rem', marginLeft: '4px' }} />
+              {isRulesOpen ? (
+                <>Rules <FaChevronUp style={{ fontSize: '0.62rem' }} /></>
+              ) : (
+                <>View Rules <FaChevronDown style={{ fontSize: '0.62rem' }} /></>
+              )}
             </button>
           </div>
+
+          {/* Expandable Small Rules Dropdown Drawer */}
+          {isRulesOpen && (
+            <div className="event-rules-dropdown-drawer">
+              <div className="rules-dropdown-header">
+                <span>Rules & Guidelines</span>
+                <button
+                  type="button"
+                  className="rules-dropdown-full-link"
+                  onClick={handleFullRulesClick}
+                  title="Open Full Rules Page"
+                >
+                  Full Page →
+                </button>
+              </div>
+              <ul className="rules-dropdown-list">
+                {eventRules.slice(0, 4).map((rule, idx) => (
+                  <li key={idx} className="rules-dropdown-item">
+                    <span className="rules-dropdown-num">{idx + 1}.</span>
+                    <span>{rule}</span>
+                  </li>
+                ))}
+              </ul>
+              {eventRules.length > 4 && (
+                <div style={{ marginTop: '0.5rem', textAlign: 'right' }}>
+                  <button
+                    type="button"
+                    className="rules-dropdown-full-link"
+                    onClick={handleFullRulesClick}
+                  >
+                    + {eventRules.length - 4} more rules...
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Single Primary Register Action Button (leads to rules page) */}

@@ -18,7 +18,9 @@ import {
   FaCopy,
   FaBuilding,
   FaCamera,
-  FaImage
+  FaImage,
+  FaLayerGroup,
+  FaCheckCircle
 } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { getApiUrl, getWsUrl } from '../config/api';
@@ -224,6 +226,14 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
     ? event.rules
     : [];
 
+  const highlights = (event && Array.isArray(event.highlights) && event.highlights.length > 0)
+    ? event.highlights
+    : [];
+
+  const rounds = (event && Array.isArray(event.rounds) && event.rounds.length > 0)
+    ? event.rounds
+    : [];
+
   const coordsList = (Array.isArray(liveCoordinators) && liveCoordinators.length > 0)
     ? liveCoordinators
     : (event && Array.isArray(event.coordinators) && event.coordinators.length > 0
@@ -374,9 +384,14 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
           transition={{ duration: 0.5, delay: 0.1 }}
           className="rules-title-header-wrap rules-title-header-centered"
         >
-          <span className="rules-category-tag">
-            {event.category === 'technical' ? '⚡ TECHNICAL EVENT' : '🎮 NON-TECHNICAL EVENT'}
-          </span>
+          <div className="rules-category-tags-row">
+            <span className="rules-category-tag">
+              {event.category === 'technical' ? '⚡ TECHNICAL EVENT' : '🎮 NON-TECHNICAL EVENT'}
+            </span>
+            {event.tag && (
+              <span className="rules-sub-tag-badge">{event.tag}</span>
+            )}
+          </div>
           <h1 className="rules-clean-main-title">{event.name}</h1>
           {event.alias && event.alias.toLowerCase() !== event.name.toLowerCase() && (
             <p className="rules-alias-sub">// {event.alias}</p>
@@ -472,6 +487,22 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
                 )}
               </div>
             </div>
+
+            {/* Quick Highlights (if available) */}
+            {highlights.length > 0 && (
+              <div className="rules-highlights-box">
+                <div className="rules-highlights-title">
+                  <FaBolt className="rules-highlight-bolt-icon" /> QUICK HIGHLIGHTS
+                </div>
+                <div className="rules-highlights-tags">
+                  {highlights.map((h, idx) => (
+                    <span key={idx} className="rules-highlight-pill">
+                      ⚡ {h}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Registration CTA Actions */}
             {isEsports ? (
@@ -578,7 +609,7 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
                       transition={{ duration: 0.3, delay: 0.15 + idx * 0.03 }}
                       className="rules-unified-item"
                     >
-                      <span className="rules-item-index">{idx + 1}.</span>
+                      <span className="rules-item-index">{String(idx + 1).padStart(2, '0')}.</span>
                       <span className="rules-item-text">{rule}</span>
                     </motion.li>
                   ))}
@@ -587,6 +618,35 @@ export default function EventRulesPage({ eventId, from, categoryFilter, onNaviga
                 <p className="rules-empty-text">Standard event guidelines apply. Contact event coordinators for details.</p>
               )}
             </motion.div>
+
+            {/* Round Structure (if provided) */}
+            {rounds.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.3 }}
+                className="rules-card-glass rules-rounds-card"
+              >
+                <div className="rules-card-header">
+                  <h2 className="rules-card-title">
+                    <FaLayerGroup className="rules-card-icon" /> Round Structure
+                  </h2>
+                  <span className="rules-count-badge">{rounds.length} Rounds</span>
+                </div>
+                <div className="rules-rounds-grid">
+                  {rounds.map((rnd, i) => (
+                    <div key={i} className="rules-round-card">
+                      <div className="rules-round-header">
+                        <span className="rules-round-num">ROUND {i + 1}</span>
+                        {rnd.time && <span className="rules-round-time">{rnd.time}</span>}
+                      </div>
+                      <h4 className="rules-round-title">{rnd.name}</h4>
+                      {rnd.desc && <p className="rules-round-desc">{rnd.desc}</p>}
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
             {/* Card 2: Event Coordinators & Contact (Separate Card) */}
             {coordsList.length > 0 && (
