@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { FaSun, FaMoon } from 'react-icons/fa';
 import AdminDashboard from './AdminDashboard.jsx';
 import RegistrationCoordinatorDashboard from './RegistrationCoordinatorDashboard.jsx';
+import EventCoordinatorDashboard from './EventCoordinatorDashboard.jsx';
 import { getApiUrl } from '../config/api';
 
 export default function Admin() {
@@ -72,10 +73,18 @@ export default function Admin() {
   // If we have a token, show dashboard according to user role
   if (token) {
     const loggedRole = String(user?.role || '').toLowerCase();
+    const isSuperAdmin = loggedRole === 'admin' || loggedRole === 'superadmin';
     const isRegCoord = loggedRole.includes('registration') || loggedRole.includes('reg_coord') || loggedRole === 'registration coordinator';
+    
     if (isRegCoord) {
       return <RegistrationCoordinatorDashboard token={token} user={user} onLogout={handleLogout} />;
     }
+
+    const isEventCoord = loggedRole.includes('coordinator') || loggedRole.includes('lead') || loggedRole.includes('event_coord') || isCoordinatorRoute;
+    if (isEventCoord && !isSuperAdmin) {
+      return <EventCoordinatorDashboard token={token} user={user} onLogout={handleLogout} />;
+    }
+
     return <AdminDashboard token={token} user={user} onLogout={handleLogout} />;
   }
 

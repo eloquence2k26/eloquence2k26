@@ -83,5 +83,11 @@ router.delete('/admin/homepage-coordinators/:id', adminController.verifyToken, a
 router.get('/admin/registration-status', adminController.verifyToken, adminController.requireAdminOrSuperadmin, adminController.getAdminRegistrationStatus);
 router.post('/admin/registration-status', adminController.verifyToken, adminController.requireAdminOrSuperadmin, adminController.updateRegistrationStatus);
 
+// ── Event Coordinator & Winner Endpoints ──────────────────────────────
+router.get('/winners', apiController.getEventWinners);
+router.get('/winners/:eventId', apiController.getEventWinners);
+router.post('/winners', apiController.submitEventWinners);
+router.put('/events/:id/coordinator-update', apiController.updateEventCoordinatorDetails);
+
 module.exports = router;
 

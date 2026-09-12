@@ -441,4 +441,36 @@ export async function fetchEventsData() {
   return getCachedEvents() || [];
 }
 
+export async function fetchEventWinners(eventId = null) {
+  try {
+    const url = eventId ? getApiUrl(`/api/winners/${encodeURIComponent(eventId)}`) : getApiUrl('/api/winners');
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.success) return data.data;
+    return [];
+  } catch (err) {
+    console.warn('Error fetching winners:', err);
+    return [];
+  }
+}
+
+export async function submitEventWinners(winnerPayload) {
+  const res = await fetch(getApiUrl('/api/winners'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(winnerPayload)
+  });
+  return res.json();
+}
+
+export async function updateEventCoordinatorDetails(eventId, detailsPayload) {
+  const res = await fetch(getApiUrl(`/api/events/${encodeURIComponent(eventId)}/coordinator-update`), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(detailsPayload)
+  });
+  return res.json();
+}
+
+
 

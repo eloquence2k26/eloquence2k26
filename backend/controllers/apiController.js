@@ -1256,22 +1256,173 @@ exports.updateDispatch = async (req, res) => {
   }
 };
 
-exports.deleteDispatch = async (req, res) => {
+// ── Event Winners & Certificate Handlers ──────────────────────────────
+const WINNERS_FILE = path.join(DATA_DIR, 'event_winners.json');
+if (!fs.existsSync(WINNERS_FILE)) {
+  fs.writeFileSync(WINNERS_FILE, JSON.stringify([], null, 2), 'utf-8');
+}
+
+function readWinners() {
   try {
-    const { id } = req.params;
+    if (!fs.existsSync(WINNERS_FILE)) return [];
+    const raw = fs.readFileSync(WINNERS_FILE, 'utf-8');
+    return JSON.parse(raw || '[]');
+  } catch (err) {
+    return [];
+  }
+}
+
+function writeWinners(list) {
+  try {
+    fs.writeFileSync(WINNERS_FILE, JSON.stringify(list, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Error writing winners file:', err.message);
+  }
+}
+
+exports.getEventWinners = async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    let list = [];
     try {
-      await supabase.from('dispatches').delete().eq('id', id);
+      let query = supabase.from('event_winners').select('*');
+      if (eventId) query = query.eq('event_id', eventId);
+      const { data, error } = await query;
+      if (!error && Array.isArray(data)) {
+        list = data;
+      }
     } catch (dbErr) {
-      console.warn('Supabase deleteDispatch fallback:', dbErr.message);
+      console.warn('Supabase getEventWinners fallback:', dbErr.message);
     }
 
-    let dispatches = readDispatches();
-    const filtered = dispatches.filter(d => d.id !== id);
-    writeDispatches(filtered);
+    if (list.length === 0) {
+      const local = readWinners();
+      list = eventId ? local.filter(w => w.eventId === eventId) : local;
+    }
 
-    res.json({ success: true, message: 'Sent dispatch deleted and revoked from database successfully' });
+    res.json({ success: true, count: list.length, data: list });
   } catch (err) {
-    console.error('Error deleting dispatch:', err);
-    res.status(500).json({ success: false, message: 'Failed to delete dispatch' });
+    console.error('Error fetching event winners:', err);
+    res.status(500).json({ success: false, message: 'Failed to fetch event winners' });
+  }
+};
+
+exports.submitEventWinners = async (req, res) => {
+  try {
+    const {
+      eventId,
+      eventName,
+      eventCategory,
+      submittedBy,
+      firstPlace,
+      secondPlace,
+      thirdPlace,
+      specialMentions,
+      notes
+    } = req.body;
+
+    if (!eventId || !firstPlace?.name) {
+      return res.status(400).json({ success: false, message: 'Event ID and 1st Place winner details are required' });
+    }
+
+    const winnerRecord = {
+      id: `winner-${eventId}-${Date.now()}`,
+      eventId,
+      eventName: eventName || eventId,
+      eventCategory: eventCategory || 'technical',
+      submittedBy: submittedBy || 'Event Coordinator',
+      submittedAt: new Date().toISOString(),
+      status: 'submitted',
+      firstPlace: firstPlace || null,
+      secondPlace: secondPlace || null,
+      thirdPlace: thirdPlace || null,
+      specialMentions: Array.isArray(specialMentions) ? specialMentions : [],
+      notes: notes || '',
+      updatedAt: new Date().toISOString()
+    };
+
+    // Save to Supabase if available
+    try {
+      await supabase.from('event_winners').upsert([{
+        id: winnerRecord.id,
+        event_id: winnerRecord.eventId,
+        event_name: winnerRecord.eventName,
+        event_category: winnerRecord.eventCategory,
+        submitted_by: winnerRecord.submittedBy,
+        first_place: JSON.stringify(winnerRecord.firstPlace),
+        second_place: JSON.stringify(winnerRecord.secondPlace),
+        third_place: JSON.stringify(winnerRecord.thirdPlace),
+        special_mentions: JSON.stringify(winnerRecord.specialMentions),
+        notes: winnerRecord.notes,
+        status: winnerRecord.status,
+        updated_at: winnerRecord.updatedAt
+      }], { onConflict: 'id' });
+    } catch (dbErr) {
+      console.warn('Supabase submitEventWinners fallback:', dbErr.message);
+    }
+
+    // Save locally
+    let winnersList = readWinners();
+    // Replace any previous submission for this event or append
+    const existingIndex = winnersList.findIndex(w => w.eventId === eventId);
+    if (existingIndex !== -1) {
+      winnersList[existingIndex] = winnerRecord;
+    } else {
+      winnersList.push(winnerRecord);
+    }
+    writeWinners(winnersList);
+
+    res.json({
+      success: true,
+      message: `Winner list for "${winnerRecord.eventName}" submitted successfully to the Certificate Team!`,
+      data: winnerRecord
+    });
+  } catch (err) {
+    console.error('Error submitting event winners:', err);
+    res.status(500).json({ success: false, message: 'Failed to submit event winners' });
+  }
+};
+
+exports.updateEventCoordinatorDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { rounds, rules, venue, time, conductorNotes } = req.body;
+
+    const EVENTS_FILE = path.join(DATA_DIR, 'events.json');
+    let events = [];
+    if (fs.existsSync(EVENTS_FILE)) {
+      events = JSON.parse(fs.readFileSync(EVENTS_FILE, 'utf-8') || '[]');
+    }
+
+    const idx = events.findIndex(e => e.id === id);
+    if (idx !== -1) {
+      if (rounds) events[idx].rounds = rounds;
+      if (rules) events[idx].rules = rules;
+      if (venue) events[idx].venue = venue;
+      if (time) events[idx].time = time;
+      if (conductorNotes !== undefined) events[idx].conductorNotes = conductorNotes;
+      events[idx].updatedAt = new Date().toISOString();
+      fs.writeFileSync(EVENTS_FILE, JSON.stringify(events, null, 2), 'utf-8');
+    }
+
+    try {
+      const updateData = {};
+      if (rounds) updateData.rounds = rounds;
+      if (rules) updateData.rules = rules;
+      if (venue) updateData.venue = venue;
+      if (time) updateData.time = time;
+      await supabase.from('events').update(updateData).eq('id', id);
+    } catch (dbErr) {
+      console.warn('Supabase update event coordinator details fallback:', dbErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Event rounds and coordinator details updated successfully',
+      data: idx !== -1 ? events[idx] : { id, rounds, rules, venue, time }
+    });
+  } catch (err) {
+    console.error('Error updating event coordinator details:', err);
+    res.status(500).json({ success: false, message: 'Failed to update event details' });
   }
 };
