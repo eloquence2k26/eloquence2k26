@@ -1,35 +1,20 @@
-import { useState, useEffect, useRef } from 'react';
-import events from '../data/events.js';
+import { getCachedEvents, fetchEventsData } from '../services/api.js';
 import EventCard from './EventCard.jsx';
-import { getApiUrl } from '../config/api';
 
 export default function EventSection({ onRegister, onViewRules }) {
-  const [eventsList, setEventsList] = useState(events);
+  const initialCache = getCachedEvents();
+  const [eventsList, setEventsList] = useState(() => initialCache || []);
   const [filter, setFilter] = useState('all');
   const [visible, setVisible] = useState(false);
   const sectionRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
-    fetch(getApiUrl('/api/events'))
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((result) => {
-        if (isMounted && result.success && Array.isArray(result.data) && result.data.length > 0) {
-          const sorted = [...result.data].sort((a, b) => {
-            if (a.category !== b.category) {
-              return a.category === 'technical' ? -1 : 1;
-            }
-            return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
-          });
-          setEventsList(sorted);
-        }
-      })
-      .catch((err) => {
-        console.warn('EventSection live fetch fallback to local data:', err);
-      });
+    fetchEventsData().then((data) => {
+      if (isMounted && Array.isArray(data) && data.length > 0) {
+        setEventsList(data);
+      }
+    });
     return () => {
       isMounted = false;
     };

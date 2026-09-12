@@ -5,7 +5,7 @@ import Home from '../pages/Home.jsx';
 import EventsPage from '../pages/EventsPage.jsx';
 import EventRulesPage from '../pages/EventRulesPage.jsx';
 import RegistrationPage from '../pages/RegistrationPage.jsx';
-import events from '../data/events.js';
+import { getCachedEvents, fetchEventsData } from '../services/api.js';
 
 const Admin = lazy(() => import('../pages/Admin.jsx'));
 
@@ -24,20 +24,16 @@ function parseHash(hash) {
 
   if (pathPart.startsWith('#/register/') || pathPart === '#/register' || pathPart.startsWith('#register')) {
     const parts = pathPart.split('/');
-    const id = parts[2];
+    const id = parts[2] ? parts[2].trim() : null;
     let game = gameParam;
     if (!game && parts[3]) {
       const g = parts[3].toLowerCase();
       if (g.includes('bgmi')) game = 'BGMI';
       else if (g.includes('free') || g.includes('fire')) game = 'FREE FIRE';
     }
-    const found = id ? events.find((e) => e.id === id || e.id.toLowerCase() === id?.toLowerCase()) : null;
-    if (!found) {
-      return { page: 'events', eventId: null, sectionId: null, from, categoryFilter, game: null };
-    }
     return {
       page: 'register',
-      eventId: found.id,
+      eventId: id,
       sectionId: null,
       from,
       categoryFilter,
@@ -46,11 +42,10 @@ function parseHash(hash) {
   }
   if (pathPart.startsWith('#/events/') || pathPart.startsWith('#/event/')) {
     const parts = pathPart.split('/');
-    const id = parts[2];
-    const found = events.find((e) => e.id === id || e.id.toLowerCase() === id?.toLowerCase());
+    const id = parts[2] ? parts[2].trim() : 'tech-01';
     return {
       page: 'event-rules',
-      eventId: found ? found.id : events[0].id,
+      eventId: id,
       sectionId: null,
       from,
       categoryFilter,
@@ -82,6 +77,10 @@ export default function AppRouter() {
   };
 
   const [isAdminRoute, setIsAdminRoute] = useState(checkIsAdminOrCoordinator);
+
+  useEffect(() => {
+    fetchEventsData().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {

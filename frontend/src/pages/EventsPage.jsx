@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { FaBolt, FaArrowLeft, FaArrowRight, FaTimes } from 'react-icons/fa';
-import events from '../data/events.js';
+import { FaBolt, FaArrowLeft, FaTimes } from 'react-icons/fa';
+import { motion } from 'framer-motion';
 import EventCard from './EventCard.jsx';
-import { getApiUrl } from '../config/api';
+import { getCachedEvents, fetchEventsData } from '../services/api.js';
 
 function AnimatedNumber({ value, prefix = '', suffix = '', padDigits = 2, duration = 1800 }) {
   const [displayVal, setDisplayVal] = useState(0);
@@ -43,32 +43,28 @@ function AnimatedNumber({ value, prefix = '', suffix = '', padDigits = 2, durati
 }
 
 export default function EventsPage({ onNavigate }) {
-  const [eventsList, setEventsList] = useState(events);
+  const initialCache = getCachedEvents();
+  const [eventsList, setEventsList] = useState(() => initialCache || []);
+  const [loading, setLoading] = useState(() => !initialCache || initialCache.length === 0);
   const [filter, setFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const canvasRef = useRef(null);
 
-  // Fetch live event data from backend API with static fallback
+  // Fetch live event data from backend API
   useEffect(() => {
     let isMounted = true;
-    fetch(getApiUrl('/api/events'))
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then((result) => {
-        if (isMounted && result.success && Array.isArray(result.data) && result.data.length > 0) {
-          const sorted = [...result.data].sort((a, b) => {
-            if (a.category !== b.category) {
-              return a.category === 'technical' ? -1 : 1;
-            }
-            return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
-          });
-          setEventsList(sorted);
+    fetchEventsData()
+      .then((data) => {
+        if (isMounted && Array.isArray(data) && data.length > 0) {
+          setEventsList(data);
+          setLoading(false);
         }
       })
       .catch((err) => {
-        console.warn('EventsPage live fetch fallback to local data:', err);
+        console.warn('EventsPage live fetch error:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
       });
     return () => {
       isMounted = false;
@@ -144,7 +140,6 @@ export default function EventsPage({ onNavigate }) {
     }
   };
 
-  // Register button on event cards leads to rules page as requested
   const handleRegister = (eventId) => {
     if (onNavigate) {
       onNavigate('event-rules', eventId, { from: 'events' });
@@ -168,6 +163,64 @@ export default function EventsPage({ onNavigate }) {
   const totalNonTechCount = eventsList.filter((e) => e.category === 'non-technical').length;
   const techEvents = filteredEvents.filter((e) => e.category === 'technical');
   const nonTechEvents = filteredEvents.filter((e) => e.category === 'non-technical');
+
+  if (loading && eventsList.length === 0) {
+    return (
+      <div className="events-page" style={{ minHeight: '80vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="events-loading-container"
+          style={{ padding: '3rem 1.5rem', maxWidth: '480px' }}
+        >
+          <div className="cyber-loader-wrap">
+            <motion.div
+              className="cyber-orbit-ring-outer"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 3.5, repeat: Infinity, ease: 'linear' }}
+            />
+            <motion.div
+              className="cyber-orbit-ring-inner"
+              animate={{ rotate: -360 }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: 'linear' }}
+            />
+            <motion.div
+              className="cyber-loader-core"
+              animate={{
+                scale: [0.92, 1.08, 0.92],
+                boxShadow: [
+                  '0 0 15px rgba(57, 255, 136, 0.4)',
+                  '0 0 28px rgba(0, 240, 255, 0.75)',
+                  '0 0 15px rgba(57, 255, 136, 0.4)',
+                ],
+              }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <FaBolt className="cyber-loader-icon" />
+            </motion.div>
+          </div>
+
+          <div className="cyber-loading-meta">
+            <h4 className="cyber-loading-title">INITIALIZING EVENTS DATABASE</h4>
+            <p className="cyber-loading-subtext">
+              Loading official competitions directly from server
+              <span className="cyber-loading-dots">
+                <span>.</span><span>.</span><span>.</span>
+              </span>
+            </p>
+            <div className="cyber-loading-beam-wrap">
+              <motion.div
+                className="cyber-loading-beam"
+                animate={{ x: ['-100%', '100%'] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+              />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="events-page">
